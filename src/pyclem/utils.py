@@ -525,3 +525,7 @@ def array_to_list(stacked_array: np.ndarray) -> List[np.ndarray]:
             array_without_nan = stacked_array[:, :, x][~np.isnan(stacked_array[:, :, x]).any(axis=1)]
             restored_list.append(array_without_nan)
     return restored_list
+
+
+if __name__ == '__main__':
+    pass
