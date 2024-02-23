@@ -88,18 +88,6 @@ def _conv_value(v: str) -> Union[int, float, str]:
     return v
 
 
-def get_subdir(root_dir: Union[str, Path] = Path()) -> List[str]:
-    """
-    Returns sub-directories in given root-directory.
-    """
-    dirs = []
-    for file in os.listdir(root_dir):
-        d = os.path.join(root_dir, file)
-        if os.path.isdir(d):
-            dirs.append(file)
-    return dirs
-
-
 def chdir(path):
     """Context manager to temporarily change the working directory
 
@@ -125,8 +113,16 @@ def chdir(path):
         os.chdir(old_wd)
 
 
-if __name__ == '__main__':
-    pass
+def get_subdir(root_dir: Union[str, Path] = Path()) -> List[str]:
+    """
+    Returns sub-directories in given root-directory.
+    """
+    dirs = []
+    for file in os.listdir(root_dir):
+        d = os.path.join(root_dir, file)
+        if os.path.isdir(d):
+            dirs.append(file)
+    return dirs
 
 
 def extract_files(pattern: str, parent: Union[str, Path] = Path(), id_dict: bool = False):
@@ -139,3 +135,7 @@ def extract_files(pattern: str, parent: Union[str, Path] = Path(), id_dict: bool
         old_name = Path(parent, file)
         new_name = Path(parent, base_fn)
         os.rename(old_name, new_name)
+
+
+if __name__ == '__main__':
+    pass
