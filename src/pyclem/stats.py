@@ -13,6 +13,109 @@ from pyclem.io import get_files
 from pyclem.utils import divide, intersect2d, polygon_dilation
 
 
+def summarize_stats(analysis_dir: Union[str, Path],
+                    sample_pattern: str = r'\d{8}.*cell\d{3}_inv\.tif',
+                    do_mrcnn_stats: bool = True,
+                    do_feature_stats: bool = True,
+                    do_brightness_stats: bool = True) -> None:
+    """
+    Summarizes accuracy statistics for all files in a given directory.
+    """
+    # Make sure the directory name is a Path object
+    analysis_dir = Path(analysis_dir)
+    if not analysis_dir.is_dir():
+        raise ValueError('The specified path is not a directory!')
+
+    # Summarize mrcnn stats
+    if do_mrcnn_stats:
+        print('Summarizing mrcnn stats ...')
+        # Get existing stats files in the directory
+        mrcnn_pattern = sample_pattern.replace(r'\.tif', r'_mrcnn-stats\.csv')
+        stats_files, _ = get_files(pattern=mrcnn_pattern, subdir=analysis_dir)
+        if not stats_files:
+            print(f'No mrcnn-stats files found in the directory {analysis_dir}!')
+        else:
+            # Create summary dataframe
+            summary = pd.DataFrame({
+                'p': [0, 0, 0],
+                'tp': [0, 0, 0],
+                'fp': [0, 0, 0],
+                'fn': [0, 0, 0]})
+            # Create list to store names of the files included in summary
+            included_files = []
+
+            # Loop over stats files and add to summary
+            for stats_file in stats_files:
+                # Load stats file
+                stats = pd.read_csv(Path(analysis_dir, stats_file))
+                # Store sample name
+                included_files.append(stats_file)
+                # Add to summary
+                summary['p'] = summary['p'] + stats['p']
+                summary['tp'] = summary['tp'] + stats['tp']
+                summary['fp'] = summary['fp'] + stats['fp']
+                summary['fn'] = summary['fn'] + stats['fn']
+            # Calculate TPR and FDR for summary statistics
+            summary['TPR'] = summary.apply(lambda row: divide(a=row['tp'], b=row['p']), axis=1)
+            summary['FDR'] = summary.apply(lambda row: divide(a=row['fp'], b=row['tp'] + row['fp']), axis=1)
+
+            # Save dictionary as csv-file
+            save_name = Path(analysis_dir, 'mrcnn-stats_summary.csv')
+            summary.to_csv(save_name, index=False)
+            # Save list of included files
+            with open(save_name.with_name(save_name.stem + '_included_files.txt'), 'w') as f:
+                for file in included_files:
+                    f.write(file + '\n')
+
+    # Summarize feature stats
+    if do_feature_stats:
+        print('Summarizing feature stats ...')
+        # Get existing stats files in the directory
+        feature_pattern = sample_pattern.replace(r'\.tif', r'_feature-stats\.csv')
+        stats_files, _ = get_files(pattern=feature_pattern, subdir=analysis_dir)
+        if not stats_files:
+            print(f'No feature-stats files found in the directory {analysis_dir}!')
+        else:
+            # Create list to summarize feature stats
+            summary = []
+            # Loop over stats files and add to summary
+            for stats_file in stats_files:
+                # Load stats file
+                stats = pd.read_csv(Path(analysis_dir, stats_file), index_col=0)
+                # Add to summary
+                summary.append(stats)
+            # Concatenate all stats files
+            summary = pd.concat(summary, ignore_index=False)
+            # Save as csv-file
+            save_name = Path(analysis_dir, 'feature-stats_summary.csv')
+            summary.to_csv(save_name, index=True)
+
+    # Summarize brightness stats
+    if do_brightness_stats:
+        print('Summarizing brightness stats ...')
+        # Get existing stats files in the directory
+        brightness_pattern = sample_pattern.replace(r'\.tif', r'_brightness-stats\.csv')
+        stats_files, _ = get_files(pattern=brightness_pattern, subdir=analysis_dir)
+        if not stats_files:
+            print(f'No brightness-stats files found in the directory {analysis_dir}!')
+        else:
+            # Create list to summarize brightness stats
+            summary = []
+            # Loop over stats files and add to summary
+            for stats_file in stats_files:
+                # Load stats file
+                stats = pd.read_csv(Path(analysis_dir, stats_file), index_col=0)
+                # Set index name to sample name
+                stats.index = [Path(stats_file).stem.replace('_brightness-stats', '.tif')] * len(stats)
+                # Add to summary
+                summary.append(stats)
+            # Concatenate all stats files
+            summary = pd.concat(summary, ignore_index=False)
+            # Save as csv-file
+            save_name = Path(analysis_dir, 'brightness-stats_summary.csv')
+            summary.to_csv(save_name, index=True)
+            
+
 def get_mrcnn_stats(file: Union[str, Path] = Path(), conf_int: float = 0.05) -> pd.DataFrame:
     """
     Generates statistics on how well MaskRCNN segmented clathrin when compared to manual segmentation.
