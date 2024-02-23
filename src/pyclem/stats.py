@@ -114,7 +114,7 @@ def summarize_stats(analysis_dir: Union[str, Path],
             # Save as csv-file
             save_name = Path(analysis_dir, 'brightness-stats_summary.csv')
             summary.to_csv(save_name, index=True)
-            
+
 
 def get_mrcnn_stats(file: Union[str, Path] = Path(), conf_int: float = 0.05) -> pd.DataFrame:
     """
