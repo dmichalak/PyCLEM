@@ -1,0 +1,13 @@
+# Do not edit - changes here will be overwritten by Copier
+_commit: v1
+_src_path: gh:pydev-guide/pyrepo-copier
+author_email: andreas.m.arnold@gmail.com
+author_name: Andreas M Arnold
+github_username: andreasmarnold
+mode: tooling
+module_name: pyclem
+project_name: pyclem
+project_short_description: Package containing tools and napari-widgets for manual
+    correction and analysis of RGB-segmentation masks as used in the analysis of CLEM
+    experiments.
+
