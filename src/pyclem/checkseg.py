@@ -15,7 +15,8 @@ from pyclem.utils import (array_to_list,
                           separate_mask_features,
                           list_to_array,
                           shapes_to_mask,
-                          apply_cellmask, mask_to_shapes)
+                          apply_cellmask,
+                          mask_to_shapes)
 
 
 # Parameters:

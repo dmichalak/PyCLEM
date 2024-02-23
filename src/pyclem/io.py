@@ -127,3 +127,15 @@ def chdir(path):
 
 if __name__ == '__main__':
     pass
+
+
+def extract_files(pattern: str, parent: Union[str, Path] = Path(), id_dict: bool = False):
+    """
+    Finds all files matching "pattern" (folder structure does not matter) and moves them into "parent" folder.
+    """
+    files, _ = get_files(pattern=pattern, subdir=parent, id_dict=id_dict)
+    for file in files:
+        _, base_fn = os.path.split(file)
+        old_name = Path(parent, file)
+        new_name = Path(parent, base_fn)
+        os.rename(old_name, new_name)
