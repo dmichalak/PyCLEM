@@ -6,12 +6,11 @@ from typing import Union, Tuple, List
 import numpy as np
 import pandas as pd
 from aicsimageio import AICSImage
-from pyclem.analyse import is_isolated
 from skimage.measure import label, regionprops
 from tifffile import tifffile
 
 from pyclem.io import get_files
-from pyclem.utils import divide, intersect2d, polygon_dilation
+from pyclem.utils import divide, intersect2d, polygon_dilation, is_isolated
 
 
 def summarize_stats(analysis_dir: Union[str, Path],
@@ -371,10 +370,11 @@ def get_brightness_stats(fn: Union[str, Path],
             labeled_mask, num_feat = label(np.any(mask != 0, axis=2), connectivity=1, return_num=True)
             if num_feat == 1:
                 central_label = 1
+                stats_frame['isolated'] = True
             else:
                 central_label = labeled_mask[int(labeled_mask.shape[0]//2), int(labeled_mask.shape[1]//2)]
-            stats_frame['isolated'] = is_isolated(label_tile=labeled_mask, central_feat_nr=central_label,
-                                                  min_dist=iso_dist)
+                stats_frame['isolated'] = is_isolated(label_tile=labeled_mask, central_feat_nr=central_label,
+                                                      min_dist=iso_dist)
             stats_frame['iso_dist'] = iso_dist
 
             # Transform to binary mask of central feature
