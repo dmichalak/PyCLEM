@@ -11,6 +11,9 @@ from pyclem.utils import shapes_to_mask
 
 
 def cellmask_main():
+    """
+    Main function to run the cellmask widget in Napari.
+    """
     # Create napari viewer
     viewer = napari.Viewer()
     # Add cell outline widget to napari viewer
@@ -19,27 +22,37 @@ def cellmask_main():
 
 
 @magicgui(viewer={'visible': False, 'label': 'Napari Viewer'},
+          rescale_to={'widget_type': 'Slider', 'name': 'rescale_px_size_to', 'min': 5, 'max': 20},
           call_button='Start')
 def cellmask_widget(viewer: 'napari.viewer.Viewer',
+                    rescale_to: int = 10,
                     filename: Path = Path(r'some\EM-file_inv.tif')):
     """
     A Napari widget for outlining cells and saving cell masks.
 
     This widget provides an interactive way to outline cells on an image.
     It will load a selected image and use the "Start" button to begin the cell outlining process.
-    Once the outlining is done, clicking the "Finish & Save" button will save the results as polygon and a
-    binary mask, before resetting the widget for the next use.
+    Once the outlining is done, clicking the "Finish & Save" button will save the results as a binary mask,
+    before resetting the widget for the next use.
 
-    Parameters:
-        viewer (napari.viewer.Viewer):
-            The Napari viewer instance to which images and shapes will be added.
+    Parameters
+    ----------
+    viewer : napari.viewer.Viewer
+        The Napari viewer instance to which images and shapes will be added.
+    rescale_to : int, optional
+        Pixel size to which the image data should be rescaled (default: 10).
+    filename : Path, optional
+        The path to the EM image file to be loaded (default: Path('some\\EM-file_inv.tif')).
 
-        filename (Path, optional):
-            The path to the EM image file to be loaded (default: Path('some\\EM-file_inv.tif')).
+    Returns
+    -------
+    None
+        This function does not return any value but handles the interactive cell outlining and saving process.
 
-    Notes:
-        - Ensure the EM image file is compatible with the AICSImage class.
-        - After clicking "Save Mask and Finish," the widget clears all layers and resets to "Start" mode.
+    Notes
+    -----
+    - Ensure the EM image file is compatible with the AICSImage class.
+    - After clicking "Save Mask and Finish," the widget clears all layers and resets to "Start" mode.
     """
 
     # Initialize member variable for image files
@@ -64,9 +77,8 @@ def cellmask_widget(viewer: 'napari.viewer.Viewer',
             cellmask_widget.cellmask_file = None
 
         # Rescale image data to a pixel size of 10nm (to avoid extremely large images)
-        # Todo: Make this an adjustable parameter instead of hardcoding it to 10nm
         im = transform.rescale(image=np.squeeze(cellmask_widget.im_file.data),
-                               scale=cellmask_widget.im_file.physical_pixel_sizes[-1]/1e-02,
+                               scale=cellmask_widget.im_file.physical_pixel_sizes[-1]/(rescale_to*1e-03),
                                order=1, preserve_range=True)
         # Add image to napari viewer
         viewer.add_image(im, name='EM Image', colormap='gray', interpolation2d='nearest')
