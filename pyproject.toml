@@ -39,6 +39,7 @@ dependencies = [
     "aicsimageio[all]",
     "libjpeg-turbo==2.1.5.1",
     "napari",
+    "matplotlib",
     "pandas",
     "pyqt",
     "shapely",
