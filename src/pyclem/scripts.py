@@ -191,16 +191,18 @@ def invert_and_save(fn: Union[Path, str, List[Path], List[str]]) -> None:
     Returns:
         None: The function does not return any values. The inverted image is saved as an OME TIFF file.
     """
-    # Ensure filename(s) is/are a Path object or a list of Path objects
+    # Ensure fn is a list of Path objects
     if isinstance(fn, (str, Path)):
         fn = [Path(fn)]
     elif isinstance(fn, (list, tuple)):
         fn = [Path(file) for file in fn]
-    # Load file(s) as AICSImage object(s)
-    images = [AICSImage(file) for file in fn]
-    # Save inverted image(s) (including pixel sizes)
-    for i, image in enumerate(images):
-        new_fn = fn[i].parent / f"{fn[i].stem}_inv{fn[i].suffix}"
+
+    # Loop over fn
+    for file in fn:
+        # Load file as AICSImage object
+        image = AICSImage(file)
+        # Save inverted image (including pixel sizes)
+        new_fn = file.with_name(file.stem + '_inv' + file.suffix)
         OmeTiffWriter.save(data=invert(image.data), uri=new_fn,
                            physical_pixel_sizes=image.physical_pixel_sizes)
 
