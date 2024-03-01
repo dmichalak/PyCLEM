@@ -115,7 +115,25 @@ def chdir(path):
 
 def get_subdir(root_dir: Union[str, Path] = Path()) -> List[str]:
     """
-    Returns sub-directories in given root-directory.
+    Returns a list of subdirectories in the given root directory.
+
+    Parameters
+    ----------
+    root_dir : Union[str, Path], optional
+        The root directory path. Defaults to the current working directory.
+
+    Returns
+    -------
+    List[str]
+        A sorted list of subdirectories in the specified root directory.
+
+    Examples
+    --------
+    >> get_subdir(Path('/my/root/directory'))
+    ['subdir1', 'subdir2', 'subdir3']
+
+    >> get_subdir()
+    ['dir_a', 'dir_b', 'dir_c']
     """
     dirs = []
     for file in os.listdir(root_dir):
@@ -125,11 +143,28 @@ def get_subdir(root_dir: Union[str, Path] = Path()) -> List[str]:
     return dirs
 
 
-def extract_files(pattern: str, parent: Union[str, Path] = Path(), id_dict: bool = False):
+def extract_files(pattern: str, parent: Union[str, Path] = Path()) -> None:
     """
-    Finds all files matching "pattern" (folder structure does not matter) and moves them into "parent" folder.
+    Finds all files matching the specified pattern and moves them into the given parent folder.
+
+    Parameters
+    ----------
+    pattern : str
+        Regular expression pattern to search for in the file names.
+    parent : Union[str, Path], optional
+        The target parent folder where matching files will be moved. Defaults to the current working directory.
+
+    Returns
+    -------
+    None
+        This function does not return any value but moves matching files to the specified parent folder.
+
+    Examples
+    --------
+    >> extract_files(r'image_(.*)_(\d{3}).tif', parent='/target/folder/')
+    # Moves files to '/target/folder/'.
     """
-    files, _ = get_files(pattern=pattern, subdir=parent, id_dict=id_dict)
+    files, _ = get_files(pattern=pattern, subdir=parent, id_dict=False)
     for file in files:
         _, base_fn = os.path.split(file)
         old_name = Path(parent, file)
