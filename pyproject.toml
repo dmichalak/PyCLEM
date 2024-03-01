@@ -36,10 +36,11 @@ classifiers = [
 ]
 # add your package dependencies here
 dependencies = [
+    "aicsimageio[all]",
     "libjpeg-turbo==2.1.5.1",
     "napari",
-    "aicsimageio[all]",
     "pandas",
+    "pyqt",
     "shapely",
 ]
 
