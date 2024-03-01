@@ -554,5 +554,40 @@ def remove_duplicate_files_from_list(files: List[Union[str, Path]]) -> List[Path
     return files
 
 
+def is_isolated(label_tile: np.ndarray[int, 2], central_feat_nr: int, min_dist: Union[float, int]) -> bool:
+    """
+    Check if a labeled mask tile contains an isolated feature at the center.
+
+    Parameters:
+        label_tile (np.ndarray):
+            NxN numpy array, representing an integer labeled mask tile containing features. Here, features are not
+            distinguished by their class, but only by their label number.
+        central_feat_nr (int):
+            The label number of the central feature to be checked for isolation.
+        min_dist (Union[float, int]):
+            The minimum distance threshold [pixels] for determining if a tile contains an isolated feature.
+            It can be a float or an integer.
+
+    Returns:
+        bool:
+            True if the tile contains an isolated feature at the center, False otherwise.
+
+    Notes:
+        - This function checks if any other features are within min_dist pixels of the edge
+          of the central feature in the given labeled mask tile.
+    """
+    # get binary mask containing all features except the central one
+    other_features = (label_tile != central_feat_nr) & (label_tile != 0)
+    if not np.any(other_features):
+        return True
+    # get binary mask containing only the central feature
+    central_feature = label_tile == central_feat_nr
+    # dilate central feature by min_dist pixels
+    central_feature = polygon_dilation(binary_mask=central_feature, dist=min_dist)
+    # check if any other feature overlaps with the dilated central feature
+    # if not, the central feature in this tile is defined as isolated
+    return not np.any(central_feature & other_features)
+
+
 if __name__ == '__main__':
     pass
