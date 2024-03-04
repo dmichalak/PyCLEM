@@ -6,4 +6,29 @@
 [![CI](https://github.com/andreasmarnold/pyclem/actions/workflows/ci.yml/badge.svg)](https://github.com/andreasmarnold/pyclem/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/andreasmarnold/pyclem/branch/main/graph/badge.svg)](https://codecov.io/gh/andreasmarnold/pyclem)
 
-Package containing tools and napari-widgets for manual correction and analysis of RGB-segmentation masks as used in the analysis of CLEM experiments.
+Package containing tools and napari-widgets for the analysis of CLEM experiments.
+
+# Installation
+1. In git-bash, clone the pyclem repository to a local hard-drive. To do so, open git bash in the desired location and run
+```
+git clone https://git.lobos.nih.gov/taraskalab/pyclem.git
+```
+2. In conda-prompt, create a new virtual environment containing Python>=3.8
+```
+conda create -y -n pyclem-env python=3.10
+```
+3. Activate the new environment
+```
+conda activate pyclem-env`
+```
+4. Navigate to the folder containing your clone of the PyCLEM repository and install the project as editable. This ensures changes you pull from gitlab will automatically be considered.
+```
+python -m pip install -e .
+```
+
+
+5. At this point in time, the Napari plugin "Affinder" is not published in the version we need. Therefore, install it directly from it's github repository.
+```
+python -m pip install git+https://github.com/jni/affinder.git
+```
+
