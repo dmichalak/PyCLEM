@@ -12,10 +12,10 @@ from skimage.io import imread, imsave
 from skimage.util import invert
 from tifffile import tifffile
 
-from pyclem.io import get_files, get_subdir
-from pyclem.utils import auto_contrast_3d, apply_cellmask
-from pyclem.stats import get_mrcnn_stats, get_feature_stats, get_brightness_stats, summarize_stats
 from pyclem.analyse import crop_to_features
+from pyclem.io import get_files, get_subdir
+from pyclem.stats import get_mrcnn_stats, get_feature_stats, get_brightness_stats, summarize_stats
+from pyclem.utils import auto_contrast_3d, apply_cellmask
 
 
 def batch_crop_to_features(analysis_dir: Union[str, Path],
@@ -211,7 +211,7 @@ def find_and_label_cells(overview_files: Union[str, Path, List[Union[str, Path]]
                          line_width: int = 15,
                          color: Union[str, int] = 'black',
                          font_size: int = 50,
-                         contrast_limits: Tuple[float, float] = (0.05, 0.99)) -> None:
+                         contrast_limits: Tuple[float, float] = (0, 0.98)) -> None:
     """
        Automatically locate and annotate cells in overview images.
 
@@ -253,6 +253,7 @@ def find_and_label_cells(overview_files: Union[str, Path, List[Union[str, Path]]
 
     # Loop over selected files (samples)
     for overview_file in overview_files:
+        print(f'Annotating cells in {overview_file} ...')
         # Get file names for the corresponding cell images
         cell_name_pattern = re.sub(r'overview', r'cell[0-9][0-9][0-9]', overview_file.name)
         cell_files, _ = get_files(pattern=cell_name_pattern, subdir=overview_file.parent)
@@ -303,8 +304,10 @@ def find_and_label_cells(overview_files: Union[str, Path, List[Union[str, Path]]
             # Add to overview image
             overview[xy1[0]:xy2[0], xy1[1]:xy2[1]] = overview[xy1[0]:xy2[0], xy1[1]:xy2[1]] * label_im
 
+        # Convert to uint8 before saving
+        overview = (overview * 255).astype(np.uint8)
         # After finding and marking all cells, save annotated overview file as jpg
-        new_name = Path(re.sub(r'\.jpg', r'_annotated.jpg', str(overview_file)))
+        new_name = overview_file.with_name(overview_file.stem + r'_annotated.jpg')
         imsave(new_name, overview, check_contrast=False)
 
 
@@ -394,7 +397,8 @@ def move_files_to_dest(pattern: str, source: Union[str, Path] = Path(), destinat
 
 
 def split_nd2_files(fn: Union[List[Path], Path, List[str], str],
-                    channel: int = 0, create_analysis: bool = False) -> None:
+                    channel: int = 0,
+                    create_analysis: bool = True) -> None:
     """
     Splits a list of nd2 files into single tif images and saves them in a new directory.
 
@@ -422,11 +426,16 @@ def split_nd2_files(fn: Union[List[Path], Path, List[str], str],
         # Get image modality for this file (str after last underscore in filename)
         image_modality = file.stem.split('_')[-1]
         # If necessary, prepare directory to save single tif images
-        if create_analysis:
-            cell_dir = Path(file.parent, 'analysis', sample_name)
+        if file.parent.name == 'NSTORM':
+            parent_dir = file.parent.parent
         else:
-            cell_dir = Path(file.parent, sample_name)
-        cell_dir.mkdir(parents=True, exist_ok=True)
+            parent_dir = file.parent
+        if create_analysis:
+            sample_dir = Path(parent_dir, 'analysis', sample_name)
+        else:
+            sample_dir = Path(parent_dir, sample_name)
+        sample_dir.mkdir(parents=True, exist_ok=True)
+
         # Open the nd2 file using AICSImage
         nd2_file = AICSImage(file)
         # Loop over all cells
@@ -435,7 +444,7 @@ def split_nd2_files(fn: Union[List[Path], Path, List[str], str],
             nd2_file.set_scene(c)
             cell_image = nd2_file.data[:, channel, ...]
             # Save the image in the new directory as OME TIFF
-            tif_path = Path(cell_dir, f'{sample_name}_cell{c + 1:03d}_{image_modality}.tif')
+            tif_path = Path(sample_dir, f'{sample_name}_cell{c + 1:03d}_{image_modality}.tif')
             OmeTiffWriter.save(data=cell_image, uri=tif_path,
                                physical_pixel_sizes=nd2_file.physical_pixel_sizes)
 
