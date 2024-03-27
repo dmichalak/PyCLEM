@@ -331,13 +331,16 @@ def add_matching_files(target_dir: Union[str, Path],
           source directory that match the subdirectory name and the specified file extensions.
         - Files are copied only if they do not already exist in the target directory.
     """
+    # make sure extensions is a list
+    if not isinstance(extension, list):
+        extension = [extension]
     # Get list of subdirectories in target_dir
     subdirs = get_subdir(root_dir=target_dir)
     # Loop over subdirectories
     for subdir in subdirs:
         source_files = []
         for ext in extension:
-            # Get list of in source_dir matching the subdirectory name and the given extensions
+            # Get list of files in source_dir matching the subdirectory name and the given extensions
             pattern = subdir[:re.search(r'.*cell[0-9]*', subdir).end()] + r'.*' + ext
             tmp, _ = get_files(pattern=pattern, subdir=source_dir, id_dict=False)
             source_files.extend(tmp)
