@@ -244,6 +244,7 @@ def find_and_label_cells(overview_files: Union[str, Path, List[Union[str, Path]]
            # Annotate cells in a list of overview images
            find_and_label_cells(["overview1.tif", "overview2.tif"])
        """
+    # Todo: Add warning if no matching files are found! Likely due to non-matching file names or extensions.
 
     # Make sure we are handling a list of Path objects
     if not isinstance(overview_files, list):
@@ -331,6 +332,7 @@ def add_matching_files(target_dir: Union[str, Path],
           source directory that match the subdirectory name and the specified file extensions.
         - Files are copied only if they do not already exist in the target directory.
     """
+    # Todo: Add warning if no matching files are found! Likely due to non-matching file names or extensions.
     # make sure extensions is a list
     if not isinstance(extension, list):
         extension = [extension]
