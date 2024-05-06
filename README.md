@@ -17,30 +17,35 @@ Package containing tools and napari-widgets for the analysis of CLEM experiments
 
 # Installation
 1. In git-bash:
-    - clone the pyclem repository to a local hard-drive. To do so, open git bash in the desired location and run
+   - clone the pyclem repository to a local hard-drive. To do so, open git bash in the desired location and run
     ```
     git clone https://git.lobos.nih.gov/taraskalab/pyclem.git
     ```
 2. In Anaconda-prompt
-    - Create a new virtual environment containing Python>=3.8
+   - Create a new virtual environment containing Python>=3.10
     ```
     conda create -y -n pyclem-env python=3.10
     ```
-    - Activate the new environment
+   - Activate the new environment
     ```
     conda activate pyclem-env
     ```
-    - Navigate to the folder containing your clone of the PyCLEM repository.
+   - Navigate to the folder containing your clone of the PyCLEM repository.
     ```
     cd <your_folder_structure>/pyclem
     ```
-    - Install the project with
+   - Install the project with
     ```
     python -m pip install -e .
     ```
-
-
-    - At this point in time, the Napari plugin "Affinder" is not published in the version we need. Therefore, install it directly from it's github repository.
+   - Install Mask R-CNN (for Tensorflow 2.14), PyCoCo tools and Affinder
+     directly from their respective GitHub repositories.
+    ```
+    python -m pip install git+https://github.com/z-mahmud22/Mask-RCNN_TF2.14.0.git
+    ```
+    ```
+    python -m pip install git+https://github.com/philferriere/cocoapi.git#subdirectory=PythonAPI
+   ```
     ```
     python -m pip install git+https://github.com/jni/affinder.git
     ```
