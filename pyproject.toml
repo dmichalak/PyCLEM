@@ -36,13 +36,29 @@ classifiers = [
 ]
 # add your package dependencies here
 dependencies = [
+    "aicsimageio",
+    "cython==3.0.5",
+    "h5py==3.9.0",
+    "imgaug==0.4.0",
+    "ipython==7.34.0",
+    "ipython-genutils==0.2.0",
+    "ipython-sql==0.5.0",
     "jupyter",
-    "napari",
+    "keras==2.14.0",
+    "matplotlib==3.7.1",
+    "napari[all]",
     "napari-aicsimageio",
-    "matplotlib",
+    "numpy==1.23.5",
+    "opencv-contrib-python==4.8.0.76",
+    "opencv-python==4.8.0.76",
     "pandas",
+    "pillow==9.4.0",
     "PyQt5",
+    "scikit-image==0.19.3",
+    "scipy==1.11.3",
     "shapely",
+    "tensorboard==2.14.1",
+    "tensorflow==2.14.0",
 ]
 
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
