@@ -5,20 +5,17 @@ from argparse import Namespace
 from pathlib import Path
 from tkinter import Tk
 
-from prem_seg.utils import (get_files,
-                            mrcnn_preprocess,
-                            mrcnn_postprocess,
-                            mrcnn_prep_trainingdata)
-from prem_seg.worm.PR_segmentation import run_segmentation
+from pyclem.io import get_files
+from pyclem.prem_seg.PR_segmentation import run_segmentation
+from pyclem.utils import mrcnn_preprocess, mrcnn_postprocess
 
 # TODO: implement a proper parameter input. This could eventually be handled in a GUI or something like that.
 # Parameters for PR_segmentation.py:
 #################################################
 # Initial directory for file dialog (your general data directory e.g. L-drive)
-startdir = r'Z:\AA_AMA\data\Quantitative_CLEM\20240318_QCLEM_MDA_CLCa-GFP_sola\analysis'  # e.g. r'L:/AA_AMA/data'
-# Directory containing Mask R-CNN code. This should be on the same internal hard-drive as the used CUDA library.
-# Otherwise, the segmentation software does not find the CUDA library for some reason.
-root_dir = os.path.abspath("E:/prem-seg")  # e.g. "E:/prem-seg"
+startdir = r'PATH/to/your/data/folder'  # e.g. r'L:/AA_AMA/data'
+# Root directory of your local pyclem repository
+root_dir = os.path.abspath("PATH/to/your/pyclem/repository")  # e.g. "E:/pyclem"
 # Regular expression pattern to pick file used for evaluation or training
 EM_file_pattern = r'^.*cell\d{3}.*_inv\.tif$'  # e.g. r'^.*cell\d{3}.*_inv\.tif$' corresponds to '***cell012***_inv.tif'
 
