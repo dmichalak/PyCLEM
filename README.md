@@ -21,7 +21,20 @@ Package containing tools and napari-widgets for the analysis of CLEM experiments
     ```
     git clone https://git.lobos.nih.gov/taraskalab/pyclem.git
     ```
-2. In Anaconda-prompt
+2. Install CUDA 12.4.1 from https://developer.nvidia.com/cuda-toolkit-archive
+
+3. Download cudnn 9.1.1.17 for CUDA 12 from https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/windows-x86_64/
+    - Need to sign in with NVIDIA account to download
+    - library already downloaded, unzipped and stored on L-drive
+
+         L:\Lab-Taraska\AA_Group_Projects\AA_Deeplearning\cudnn-windows-x86_64-9.1.1.17_cuda12-archive
+
+    - Copy all files from this folder to the CUDA 12.4 driver directory
+
+4. On Windows, you must have the Visual C++ 2015 build tools on your path!
+Install them from https://visualstudio.microsoft.com/visual-cpp-build-tools/
+
+5. In Anaconda-prompt
    - Create a new virtual environment containing Python>=3.10
     ```
     conda create -y -n pyclem-env python=3.10
