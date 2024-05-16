@@ -1,5 +1,6 @@
 import re
 import shutil
+import warnings
 from pathlib import Path
 from typing import Union, List, Tuple
 
@@ -473,6 +474,16 @@ def blind_files(target_dir: Union[str, Path]) -> None:
           It is NOT intended for use with raw data!
           Losing the mapping file will make it impossible to revert the blinding process!
     """
+    # Warning to not use this function with raw data
+    warnings.warn("This function should not be used with raw data!\n"
+                  "Losing the generated name_dict makes it impossible to revert the file blinding.", UserWarning)
+    user_input = input("Do you want to continue? (yes/no): ")
+    while user_input.lower() not in ['yes', 'no']:
+        user_input = input("Please enter 'yes' or 'no': ")
+    if user_input.lower() != 'yes':
+        print('Blinding process aborted.')
+        return
+
     # Make sure target_dir is a Path object
     target_dir = Path(target_dir)
     # Get subfolders in target_dir as list of Path objects
