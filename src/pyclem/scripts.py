@@ -454,5 +454,95 @@ def split_nd2_files(fn: Union[List[Path], Path, List[str], str],
                                physical_pixel_sizes=nd2_file.physical_pixel_sizes)
 
 
+def blind_files(target_dir: Union[str, Path]) -> None:
+    """
+    Blind the filenames within subfolders of the specified directory.
+
+    This function renames the subfolders and files within them in a way that obscures their original names, while
+    preserving the structure of the directory.
+    It generates new names for subfolders and files, saves the mapping between the original and blind names to a text
+    file named 'name_dict.txt', and then renames the subfolders and files accordingly.
+
+    Parameters:
+        target_dir (Union[str, Path]): The directory path containing subfolders and files to be blinded.
+
+    Returns:
+        None
+
+    NOTE: This function is intended for blinding files during analysis.
+          It is NOT intended for use with raw data!
+          Losing the mapping file will make it impossible to revert the blinding process!
+    """
+    # Make sure target_dir is a Path object
+    target_dir = Path(target_dir)
+    # Get subfolders in target_dir as list of Path objects
+    subdirs = get_subdir(target_dir)
+    subdirs = [Path(target_dir, subdir) for subdir in subdirs]
+    # Shuffle list of subfolders
+    np.random.shuffle(subdirs)
+
+    # Assign each subfolder a new blind name and keep track of the mapping
+    blind_names = [f'blind_cell{c + 1:03d}' for c in range(len(subdirs))]
+    name_dict = {subdir.name: blind_name for subdir, blind_name in zip(subdirs, blind_names)}
+    # Save mapping to file
+    with open(Path(target_dir, 'name_dict.txt').as_posix(), 'w') as file:
+        for key, value in name_dict.items():
+            file.write(f'{key}: {value}\n')
+
+    # Loop over subfolders
+    for subdir in subdirs:
+        # Get new name from name_dict
+        new_name = name_dict[subdir.name]
+        # Loop over files in subfolder
+        for file in subdir.iterdir():
+            # Rename if it contains the subfolder name
+            if subdir.name in file.name:
+                new_filename = file.with_name(file.name.replace(subdir.name, new_name))
+                # print(f'{file} -> {new_filename}')
+                file.rename(new_filename)
+        # Rename subfolder
+        # print(f'{subdir} -> {new_name}')
+        subdir.rename(subdir.with_name(new_name))
+
+
+def unblind_files(target_dir: Union[str, Path]) -> None:
+    """
+    Revert the blinded filenames within subfolders of the specified directory.
+
+    This function reverses the blinding process performed by `blind_files`. It restores the original filenames of
+    subfolders and files by using the mapping stored in the 'name_dict.txt' file generated during the blinding process.
+
+    Parameters:
+        target_dir (Union[str, Path]): The directory path containing subfolders and blinded files to be reversed.
+
+    Returns:
+        None
+    """
+    # Make sure target_dir is a Path object
+    target_dir = Path(target_dir)
+    # Load mapping from file
+    name_dict = {}
+    with open(Path(target_dir, 'name_dict.txt').as_posix(), 'r') as file:
+        for line in file:
+            key, value = line.strip().split(': ')
+            name_dict[key] = value
+
+    # Loop over name_dict
+    for old_name, blind_name in name_dict.items():
+        # Get files with blind_name in the name
+        files, _ = get_files(pattern=blind_name, subdir=target_dir)
+        files = [Path(target_dir, file) for file in files]
+        # Loop over files
+        for file in files:
+            if blind_name in file.name:
+                old_filename = file.with_name(file.name.replace(blind_name, old_name))
+                # print(f'{file} -> {original_name}')
+                file.rename(old_filename)
+        # Rename subfolder
+        subfolder = Path(target_dir, blind_name)
+        # print(f'{subfolder} -> {subfolder.with_name(old_name)}')
+        subfolder.rename(subfolder.with_name(old_name))
+
+
 if __name__ == '__main__':
     pass
