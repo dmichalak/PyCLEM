@@ -62,13 +62,33 @@ def checkseg_widget(viewer: 'napari.viewer.Viewer',
     mode = checkseg_widget._call_button.text
 
     if mode == 'Start':
-        # Prepare shapes if any class is missing
-        for shape_type in ['domes', 'flats', 'spheres']:
+        # Prepare logicals to organize the workflow
+        new_shapes = False
+        progress_loaded = False
+
+        # Prepare shapes from scratch if shapes file for any class is missing
+        shape_types = ['domes', 'flats', 'spheres']
+        for shape_type in shape_types:
             fn_shapes = filename.with_name(filename.stem + f'_shapes_{shape_type}.csv')
             if not fn_shapes.exists():
                 print('Prepare shapes for checking masks in CheckSegmentationGui.py')
                 prep_for_gui(files=filename, parent_folder=filename.parent)
+                # Create logical to mark that shapes were newly created
+                new_shapes = True
+                # Break loop to avoid multiple shape preparations
                 break
+
+        # Load progress from previous run
+        if not new_shapes:
+            fn_protocol = filename.with_name(filename.stem + '_segprotocol.txt')
+            if fn_protocol.exists():
+                config = configparser.ConfigParser()
+                config.read(fn_protocol)
+                if config.has_section('CHECKSEG'):
+                    if ('current_ind' in config['CHECKSEG']) & ('tile_size' in config['CHECKSEG']):
+                        checkseg_widget.ind = int(config['CHECKSEG']['current_ind'])
+                        tile_size = int(config['CHECKSEG']['tile_size'])
+                        progress_loaded = True
 
         # Load selected EM-image
         try:
@@ -83,12 +103,11 @@ def checkseg_widget(viewer: 'napari.viewer.Viewer',
             return
 
         # Prepare grid and display in viewer
-        grid, centers, tile_size_px = prepare_grid(im_shape=(em_file.dims.Y, em_file.dims.X),
-                                                   tile_size=tile_size, px_size=px_size)
+        grid, checkseg_widget.centers, checkseg_widget.tile_size_px = prepare_grid(
+            im_shape=(em_file.dims.Y, em_file.dims.X),
+            tile_size=tile_size,
+            px_size=px_size)
         viewer.add_vectors(grid, edge_color='yellow', edge_width=30, name='Grid', vector_style='line')
-        # Keep track of centers and tile size for later use
-        checkseg_widget.centers = centers
-        checkseg_widget.tile_size_px = tile_size_px
 
         # Prepare progress map and display in viewer
         progress_map = np.zeros(shape=(em_file.dims.Y, em_file.dims.X), dtype=np.uint8)
@@ -108,27 +127,21 @@ def checkseg_widget(viewer: 'napari.viewer.Viewer',
                 remove_edge_feat(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Flats'])
                 remove_edge_feat(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Spheres'])
             # skip to first tile that is not excluded by cellmask
-            checkseg_widget.ind = skip_empty_tiles(cellmask=np.squeeze(cellmask.data),
-                                                   layer=viewer.layers['Progress map'],
-                                                   centers=checkseg_widget.centers,
-                                                   size=checkseg_widget.tile_size_px,
-                                                   ind=0, last_ind=len(checkseg_widget.centers) - 1)
-        else:
-            cellmask = None
-            # Without cellmask, just start at first tile
-            checkseg_widget.ind = 0
+            if not progress_loaded:
+                checkseg_widget.ind = skip_empty_tiles(cellmask=np.squeeze(cellmask.data),
+                                                       layer=viewer.layers['Progress map'],
+                                                       centers=checkseg_widget.centers,
+                                                       size=checkseg_widget.tile_size_px,
+                                                       ind=0, last_ind=len(checkseg_widget.centers) - 1)
 
-        # Todo: Get current tile index from segprotocol file
-        # Jump to last saved tile if index available
-        if shapes is not None and 'current_ind' in shapes.files and shapes['current_ind'] != 0:  # Todo: rethink the necessity and details of this if-statement
-            checkseg_widget.ind = shapes['current_ind']
-            for i in range(checkseg_widget.ind):
-                mark_tile(layer=viewer.layers['Progress map'],
-                          center=checkseg_widget.centers[i],
-                          size=checkseg_widget.tile_size_px)
-
+        # Mark skipped or previously checked tiles
+        for i in range(checkseg_widget.ind):
+            mark_tile(layer=viewer.layers['Progress map'],
+                      center=checkseg_widget.centers[i],
+                      size=checkseg_widget.tile_size_px)
         # Move Napari viewer to current tile
-        reset_view(viewer=viewer, center=centers[checkseg_widget.ind], size=tile_size_px)
+        reset_view(viewer=viewer, center=checkseg_widget.centers[checkseg_widget.ind],
+                   size=checkseg_widget.tile_size_px)
         # change the button/mode for next run
         checkseg_widget._call_button.text = 'Next'
 
@@ -139,12 +152,15 @@ def checkseg_widget(viewer: 'napari.viewer.Viewer',
                   size=checkseg_widget.tile_size_px)
         # Save feature shapes
         fn_shapes = filename.with_name(filename.stem + '_segshapes_check.npz')
+        # Todo: Check that shapes are saved correctly
         save_shapes(fn_save=fn_shapes,
                     domes_layer=viewer.layers['Domes'],
                     flats_layer=viewer.layers['Flats'],
                     spheres_layer=viewer.layers['Spheres'],
                     current_ind=checkseg_widget.ind)
-        # Check if we are at the end of the list
+        # Todo: Save progress (current index)
+
+        # If we are not done yet, move to next tile
         if checkseg_widget.ind < len(checkseg_widget.centers)-1:
             # Check for existance of cellmask
             try:
@@ -164,6 +180,7 @@ def checkseg_widget(viewer: 'napari.viewer.Viewer',
                 checkseg_widget.ind += 1
             reset_view(viewer=viewer, center=checkseg_widget.centers[checkseg_widget.ind],
                        size=checkseg_widget.tile_size_px)
+        # After last tile, prepare for finishing
         else:
             # Make grid and progress map invisible
             viewer.layers['Grid'].visible = False
@@ -449,8 +466,7 @@ def save_mask(save_fn: Union[Path, str], mask: np.ndarray,
 
 
 def save_shapes(em_layer: 'napari.Layer',  domes_layer: 'napari.Layer',
-                flats_layer: 'napari.Layer', spheres_layer: 'napari.Layer',
-                current_ind: int = 0, tile_size: float = 3, done: bool = False) -> None:
+                flats_layer: 'napari.Layer', spheres_layer: 'napari.Layer') -> None:
     """
     Save Napari Shapes layers and current index in a segprotocol file.
 
@@ -459,9 +475,6 @@ def save_shapes(em_layer: 'napari.Layer',  domes_layer: 'napari.Layer',
         domes_layer ('napari.Layer'): The layer containing dome shapes.
         flats_layer ('napari.Layer'): The layer containing flat shapes.
         spheres_layer ('napari.Layer'): The layer containing sphere shapes.
-        current_ind (int, optional): The index of the current tile. Defaults to 0.
-        tile_size: (float, optional): The size of the tiles in µm units. Defaults to 3.
-        done (bool, optional): Logical whether the segmentation checking is finished. Defaults to False.
 
     Returns:
         None: The function does not return any value.
@@ -471,8 +484,21 @@ def save_shapes(em_layer: 'napari.Layer',  domes_layer: 'napari.Layer',
     # Save Napari shapes layers
     for layer in [domes_layer, flats_layer, spheres_layer]:
         layer.save(fn.with_name(fn.stem + f'_shapes_{layer.name.lower()}.csv'))
-    # Save current index in segprotocol file
-    fn_protocol = Path(fn.parent, fn.stem + '_segprotocol.txt')
+
+
+def save_progress(fn_protocol: Union[Path, str], current_ind: int, tile_size: float) -> None:
+    """
+    Save the current index and tile size to a segprotocol file.
+
+    Parameters:
+        fn_protocol(Union[Path, str]): The filename or path to save the progress to.
+        current_ind (int): The index of the current tile.
+        tile_size (float): The size of the tiles in µm units.
+
+    Returns:
+        None: The function does not return any value.
+    """
+    # Prepare config parser
     config = configparser.ConfigParser()
     if fn_protocol.exists():
         config.read(fn_protocol)
@@ -480,7 +506,6 @@ def save_shapes(em_layer: 'napari.Layer',  domes_layer: 'napari.Layer',
         config.add_section('CHECKSEG')
     config.set('CHECKSEG', 'current_ind', str(current_ind))
     config.set('CHECKSEG', 'tile_size', str(tile_size))
-    config.set('CHECKSEG', 'finish_check', str(done))
     with open(fn_protocol, 'w') as configfile:
         config.write(configfile)
 
