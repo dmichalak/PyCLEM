@@ -9,7 +9,7 @@ from aicsimageio import AICSImage
 from skimage.measure import label, regionprops
 from tifffile import tifffile
 
-from pyclem.io import get_files
+from pyclem.file_io import get_files
 from pyclem.utils import divide, intersect2d, polygon_dilation, is_isolated
 
 

@@ -14,7 +14,7 @@ from skimage.util import invert
 from tifffile import tifffile
 
 from pyclem.analyse import crop_to_features
-from pyclem.io import get_files, get_subdir
+from pyclem.file_io import get_files, get_subdir
 from pyclem.stats import get_mrcnn_stats, get_feature_stats, get_brightness_stats, summarize_stats
 from pyclem.utils import auto_contrast_3d, apply_cellmask
 

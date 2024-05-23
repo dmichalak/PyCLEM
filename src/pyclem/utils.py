@@ -1,12 +1,13 @@
 import configparser
 import os
 import re
-from itertools import combinations
+import itertools
 from math import sqrt, pi, ceil
 from pathlib import Path
 from typing import Union, Tuple, List
 
 import numpy as np
+import pandas as pd
 import tifffile
 from PIL import Image
 from scipy.ndimage import binary_fill_holes
@@ -19,7 +20,7 @@ from skimage.morphology import disk, binary_closing, remove_small_objects
 from skimage.segmentation import find_boundaries
 from skimage.transform import rescale, resize
 
-from pyclem.io import get_files
+from pyclem.file_io import get_files
 
 
 def auto_contrast_3d(input_im: np.ndarray, low: float, high: float) -> np.ndarray:
@@ -280,9 +281,13 @@ def shapes_to_mask(mask_shape: Tuple[int, int],
     return mask
 
 
-def mask_to_shapes(mask: np.ndarray, rho: float = 1/10) -> Tuple[List[np.ndarray], List[str]]:
+def mask_to_shapes(mask: np.ndarray, rho: float = 1/10) -> pd.DataFrame:
     """
-    Convert a 2D boolean mask into a list of polygon shapes.
+    Convert a 2D boolean mask into a DataFrame containing polygon shapes.
+
+    This function takes a 2D boolean array representing the mask, where True values indicate the presence of a structure.
+    It then converts these structures into polygon shapes, where each shape is represented as a NumPy array of coordinates.
+    Each shape corresponds to a detected structure in the mask.
 
     Parameters:
         mask (np.ndarray):
@@ -292,10 +297,10 @@ def mask_to_shapes(mask: np.ndarray, rho: float = 1/10) -> Tuple[List[np.ndarray
             in more vertices. Default is 1/10.
 
     Returns:
-        List[np.ndarray]:
-            A list of polygon shapes, where each shape is represented as a NumPy array of coordinates.
-            Each shape corresponds to a detected structure in the mask.
-        List[str]: A list of strings indicating the shape type for each shape. All shapes in this function are polygons.
+        pd.DataFrame:
+            A DataFrame containing the polygon shapes detected in the mask. Each row represents a vertex of a shape.
+            The DataFrame has columns: 'index' (shape index), 'shape-type' (always 'polygon'), 'vertex-index'
+            (index of the vertex within its shape), 'axis-0' (x-coordinate), and 'axis-1' (y-coordinate).
 
     Notes:
         - The function calculates the number of vertices for each structure based on the line density and the
@@ -307,12 +312,14 @@ def mask_to_shapes(mask: np.ndarray, rho: float = 1/10) -> Tuple[List[np.ndarray
     """
     # Make sure mask is boolean
     mask = mask.astype(bool)
-    # Preallocate shapes
-    shapes = []
     if not mask.any():
-        # Return if mask doesn't contain any structures
-        return shapes
+        # Return empty data frame if mask doesn't contain any structures
+        shape_data = pd.DataFrame({new_list: np.asarray([])
+                                   for new_list in ['index', 'shape-type', 'vertex-index', 'axis-0', 'axis-1']})
+        return shape_data
     else:
+        # Preallocate shapes
+        shapes = []
         # set one line of pixels touching the border to zero
         # --> this ensures that features touching the border are correctly converted to shapes
         mask = border_pixel_to_zero(mask)
@@ -325,7 +332,8 @@ def mask_to_shapes(mask: np.ndarray, rho: float = 1/10) -> Tuple[List[np.ndarray
             # the individual structures (assumes circular shape).
             n = ceil(2 * rho * sqrt(struct.area_convex * pi))
             # Calculate offset from global image for this structure
-            offset = np.array((struct.bbox[0] - 1, struct.bbox[1] - 1)).reshape(1, 2)  # -1 to account padding with zeros (below)
+            offset = (np.array((struct.bbox[0] - 1, struct.bbox[1] - 1))  # -1 to account padding with zeros (below)
+                      .reshape(1, 2))
             # Get contours for this structure
             contours = find_contours(border_pixel_to_zero(im=struct.image, pad=True))
             # Select evenly spaced vertices for each contour
@@ -342,7 +350,7 @@ def mask_to_shapes(mask: np.ndarray, rho: float = 1/10) -> Tuple[List[np.ndarray
                 num_contours = len(contours)
                 connection_matrix = np.full((num_contours, num_contours, 3), np.nan)
                 # Calculate pairwise minimum distances and corresponding points for all contours
-                for i, j in combinations(range(num_contours), 2):
+                for i, j in itertools.combinations(range(num_contours), 2):
                     if i != j:
                         pt_ij, pt_ji, distance = find_closest_pts(poly1=contours[i], poly2=contours[j])
                         # Store in connection matrix
@@ -368,13 +376,22 @@ def mask_to_shapes(mask: np.ndarray, rho: float = 1/10) -> Tuple[List[np.ndarray
                     # Update index for outer contour
                     ind1 = ind2
             # Add contour to shapes (apply offset to get global coordinates)
+            # Note: Up to here, contours were closed polygons (i.e., last point = first point)
+            #       --> Remove last point to avoid duplicate points in the final shape
             if len(contour) > 2:
-                shapes.append(contour + offset)
-        # All shapes are polygons when created from an RGB mask
-        # --> Create a list of the same length as shapes containing the string 'polygon'
-        shape_types = ['polygon' for _ in range(len(shapes))]
-        # Return the shapes with reduced number of vertices
-        return shapes, shape_types
+                shapes.append(contour[:-1, :] + offset)
+
+        # Prepare arrays with information for every shape vertex (e.g., shape type, vertex-index, ...)
+        shape_types = np.concatenate([['polygon' for vertice in shape] for shape in shapes], axis=0)
+        vertex_indices = np.concatenate([[i for i in range(len(shape))] for shape in shapes], axis=0)
+        shape_indices = np.concatenate([[shape_num for vertice in shape] for (shape_num, shape) in enumerate(shapes)],
+                                       axis=0)
+        shapes = np.concatenate(shapes, axis=0)
+        # Store all information in Pandas DataFrame
+        shape_data = pd.DataFrame({new_list: entry for new_list, entry in
+                                   zip(['index', 'shape-type', 'vertex-index', 'axis-0', 'axis-1'],
+                                       [shape_indices, shape_types, vertex_indices, shapes[:, 0], shapes[:, 1]])})
+        return shape_data
 
 
 def find_closest_pts(poly1: np.ndarray, poly2: np.ndarray) -> (np.ndarray, np.ndarray, float):
@@ -481,6 +498,7 @@ def divide(a: Union[int, float], b: Union[int, float]):
         return a / b
 
 
+# Todo: Delete unused function
 def list_to_array(input_list: List[np.ndarray]) -> np.ndarray:
     """
     Convert a list of 2D NumPy arrays into a 3-dimensional NumPy array. Used for saving feature shapes as numpy arrays.
@@ -510,6 +528,7 @@ def list_to_array(input_list: List[np.ndarray]) -> np.ndarray:
         return stacked_arrays
 
 
+# Todo: Delete unused function
 def array_to_list(stacked_array: np.ndarray) -> List[np.ndarray]:
     """
     Convert a 3-dimensional NumPy array back to a list of 2D NumPy arrays.
@@ -539,6 +558,7 @@ def array_to_list(stacked_array: np.ndarray) -> List[np.ndarray]:
     return restored_list
 
 
+# Todo: Refactor and move to file_io.py
 def remove_duplicate_files_from_list(files: List[Union[str, Path]]) -> List[Path]:
     """
     Removes duplicates from a list of files. Only the base filename is considered for this meaning if there are files
@@ -676,7 +696,6 @@ def mrcnn_preprocess(files: Union[list, str, Path],
         # Get path of image tiles relative to original image
         rel_path = os.path.relpath(im_dir, os.path.dirname(file))
         # Save tile_size, tile_overlap and relative path of image tiles in protocol .txt file
-        # for later use in CheckSegmentationGui.py
         fn_protocol = Path(file.parent, file.stem + '_segprotocol.txt')
         config = configparser.ConfigParser()
         if fn_protocol.exists():
@@ -1182,6 +1201,7 @@ def clear_border(im: np.ndarray):
     return im
 
 
+# Todo: Delete unused function
 def convert_to_bool(array: np.ndarray):
     """
     Convert the input array to a boolean copy.
@@ -1195,6 +1215,7 @@ def convert_to_bool(array: np.ndarray):
     return array if array.dtype == bool else array != 0
 
 
+# Todo: Delete unused function
 def convert_back(bool_array: np.ndarray, original_array: np.ndarray):
     """
     Convert a boolean array back to the original data type.

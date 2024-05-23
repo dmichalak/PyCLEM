@@ -1,3 +1,4 @@
+import configparser
 import warnings
 from itertools import product
 from pathlib import Path
@@ -7,17 +8,13 @@ import napari
 import numpy as np
 from aicsimageio import AICSImage
 from magicgui import magicgui
-from skimage.morphology import remove_small_objects
-from tifffile import tifffile
-
-from pyclem.utils import (array_to_list,
-                          handle_overlaps,
+from pyclem.utils import (handle_overlaps,
                           separate_mask_features,
-                          list_to_array,
                           shapes_to_mask,
                           apply_cellmask,
                           mask_to_shapes)
-
+from skimage.morphology import remove_small_objects
+from tifffile import tifffile
 
 # Parameters:
 MIN_AREA = 10e-03 ** 2 * np.pi  # Minimum area of a feature in µm^2 (default: circle with r = 8 nm)
@@ -29,15 +26,21 @@ def checkseg_main():
     napari.run()
 
 
-@magicgui(viewer={'visible': False, 'label': 'Napari Viewer'},
-          call_button='Start',
-          tile_size={'widget_type': 'Slider', 'name': 'tile_size', 'min': 1, 'max': 10},
-          remove_edge_feat={'widget_type': 'CheckBox', 'name': 'remove_edge_features',
-                            'label': 'Remove features that touch the edge of the cell mask'})
-def checkseg_widget(viewer: 'napari.viewer.Viewer',
-                    tile_size: int = 3,
-                    filename: Path = Path(r'some\EM-file_inv.tif'),
-                    remove_edge_feat: bool = False):
+@magicgui(
+    viewer={'visible': False, 'label': 'Napari Viewer'},
+    call_button='Start',
+    tile_size={'widget_type': 'Slider', 'name': 'tile_size', 'min': 1, 'max': 10},
+    remove_edge_feat={'widget_type': 'CheckBox', 'name': 'remove_edge_feat',
+                      'label': 'Remove features that touch the edge of the cell mask'},
+    redo={'widget_type': 'CheckBox', 'name': 'redo', 'label': 'Restart and ignore previous progress'},
+)
+def checkseg_widget(
+        viewer: 'napari.viewer.Viewer',
+        tile_size: int = 3,
+        filename: Path = Path(r'some\EM-file_inv.tif'),
+        remove_edge_feat: bool = False,
+        redo: bool = False,
+):
     """
     This widget allows you to perform segmentation checking.
 
@@ -60,82 +63,117 @@ def checkseg_widget(viewer: 'napari.viewer.Viewer',
     mode = checkseg_widget._call_button.text
 
     if mode == 'Start':
+        # Lock all widgets except the button
+        checkseg_widget['tile_size'].enabled = False
+        checkseg_widget['filename'].enabled = False
+        checkseg_widget['remove_edge_feat'].enabled = False
+        checkseg_widget['redo'].enabled = False
+
+        # Prepare logical to organize workflow
+        new_shapes = False
+        progress_loaded = False
+        # Initialize tile index
+        checkseg_widget.ind = 0
+
+        # Prepare shapes from scratch if shapes file for any class is missing
+        shape_types = ['domes', 'flats', 'spheres']
+        for shape_type in shape_types:
+            fn_shapes = filename.with_name(filename.stem + f'_shapes_{shape_type}.csv')
+            if not fn_shapes.exists():
+                print('Prepare shapes for checking masks in CheckSegmentationGui.py')
+                prep_for_gui(files=filename, parent_folder=filename.parent)
+                # Create logical to mark that shapes were newly created
+                new_shapes = True
+                # Break loop to avoid multiple shape preparations
+                break
+
+        # Load progress from previous run
+        if not new_shapes and not redo:
+            fn_protocol = filename.with_name(filename.stem + '_segprotocol.txt')
+            if fn_protocol.exists():
+                config = configparser.ConfigParser()
+                config.read(fn_protocol)
+                if config.has_section('CHECKSEG'):
+                    if ('current_ind' in config['CHECKSEG']) & ('tile_size' in config['CHECKSEG']):
+                        checkseg_widget.ind = int(config['CHECKSEG']['current_ind'])
+                        tile_size = int(config['CHECKSEG']['tile_size'])
+                        checkseg_widget.tile_size.value = tile_size
+                        progress_loaded = True
+
         # Load selected EM-image
         try:
             # Open EM image as AICSImage object and display in viewer
             em_file = AICSImage(filename)
-            viewer.add_image(np.squeeze(em_file.data), name='EM image', interpolation2d='linear')
+            viewer.open(path=filename, plugin='napari-aicsimageio', name='EM image', interpolation2d='linear')
+            # Get pixel size for EM image
+            px_size = em_file.physical_pixel_sizes[-1]  # in µm
+            checkseg_widget.px_size = px_size
         except FileNotFoundError:
             print(f'File not found: {filename}')
             return
+
+        # Prepare grid and display in viewer
+        grid, checkseg_widget.centers, checkseg_widget.tile_size_px = prepare_grid(
+            im_shape=(em_file.dims.Y, em_file.dims.X),
+            tile_size=tile_size,
+            px_size=px_size)
+        viewer.add_vectors(grid,
+                           edge_color='yellow', edge_width=30,
+                           name='Grid', vector_style='line',
+                           scale=viewer.layers['EM image'].scale)
+
+        # Prepare progress map and display in viewer
+        progress_map = np.zeros(shape=(em_file.dims.Y, em_file.dims.X), dtype=np.uint8)
+        viewer.add_image(progress_map,
+                         name='Progress map', colormap='gray',
+                         blending='additive', scale=viewer.layers['EM image'].scale)
+
+        # Load shapes and display in viewer
+        display_feature_shapes(viewer=viewer, file=filename)
 
         # Check for cellmask file and display in Viewer, if possible
         cellmask_fn = filename.with_name(filename.stem + '_cellmask.tif')
         if cellmask_fn.exists():
             cellmask = AICSImage(cellmask_fn)
             viewer.add_image(np.squeeze(cellmask.data), name='Cellmask', colormap='gray_r', blending='minimum')
-        else:
-            cellmask = None
-
-        # Get pixel size for EM image
-        px_size = em_file.physical_pixel_sizes[-1]  # in µm
-        checkseg_widget.px_size = px_size
-        # Prepare grid and display in viewer
-        grid, centers, tile_size_px = prepare_grid(im_shape=(em_file.dims.Y, em_file.dims.X),
-                                                   tile_size=tile_size, px_size=px_size)
-        viewer.add_vectors(grid, edge_color='yellow', edge_width=30, name='Grid', vector_style='line')
-        # Keep track of centers and tile size for later use
-        checkseg_widget.centers = centers
-        checkseg_widget.tile_size_px = tile_size_px
-
-        # Prepare progress map and display in viewer
-        progress_map = np.zeros(shape=(em_file.dims.Y, em_file.dims.X), dtype=np.uint8)
-        viewer.add_image(progress_map, name='Progress map', colormap='gray', blending='additive')
-
-        # Prepare shapes if necessary
-        fn_shapes = filename.with_name(filename.stem + '_segshapes_check.npz')
-        if not fn_shapes.exists():
-            fn_shapes = filename.with_name(filename.stem + '_segshapes.npz')
-            if not fn_shapes.exists():
-                if filename.with_name(filename.stem + '_segmask.tif').exists():
-                    # Prepare shapes
-                    print('Prepare shapes for checking masks in CheckSegmentationGui.py')
-                    prep_for_gui(files=filename, parent_folder=filename.parent)
-        # Load shapes and display in viewer
-        if fn_shapes.exists():
-            shapes = np.load(fn_shapes, allow_pickle=True)
-        else:
-            shapes = None  # Create empty shapes layers if no shapes are found
-        display_feature_shapes(viewer=viewer, shapes=shapes)
-
-        if cellmask is not None:
             # Remove features that touch the edge of the cellmask
             if remove_edge_feat:
-                remove_edge_feat(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Domes'])
-                remove_edge_feat(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Flats'])
-                remove_edge_feat(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Spheres'])
+                remove_edge_features(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Domes'])
+                remove_edge_features(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Flats'])
+                remove_edge_features(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Spheres'])
             # skip to first tile that is not excluded by cellmask
-            checkseg_widget.ind = skip_empty_tiles(cellmask=np.squeeze(cellmask.data),
-                                                   layer=viewer.layers['Progress map'],
-                                                   centers=checkseg_widget.centers,
-                                                   size=checkseg_widget.tile_size_px,
-                                                   ind=0, last_ind=len(checkseg_widget.centers) - 1)
+            if not progress_loaded:
+                checkseg_widget.ind = skip_empty_tiles(cellmask=np.squeeze(cellmask.data),
+                                                       layer=viewer.layers['Progress map'],
+                                                       centers=checkseg_widget.centers,
+                                                       size=checkseg_widget.tile_size_px,
+                                                       ind=checkseg_widget.ind,
+                                                       last_ind=len(checkseg_widget.centers) - 1)
+
+        # Mark skipped or previously checked tiles
+        for i in range(checkseg_widget.ind):
+            mark_tile(layer=viewer.layers['Progress map'],
+                      center=checkseg_widget.centers[i],
+                      size=checkseg_widget.tile_size_px)
+        if checkseg_widget.ind < len(checkseg_widget.centers):
+            # Move Napari viewer to current tile
+            reset_view(viewer=viewer,
+                       center=checkseg_widget.centers[checkseg_widget.ind],
+                       size=checkseg_widget.tile_size_px,
+                       scale=viewer.layers['EM image'].scale)
+            # Change the button/mode for next run
+            checkseg_widget._call_button.text = 'Next'
         else:
-            # Without cellmask, just start at first tile
-            checkseg_widget.ind = 0
-
-        # Jump to last saved tile if index available
-        if shapes is not None and 'current_ind' in shapes.files and shapes['current_ind'] != 0:
-            checkseg_widget.ind = shapes['current_ind']
-            for i in range(checkseg_widget.ind):
-                mark_tile(layer=viewer.layers['Progress map'],
-                          center=checkseg_widget.centers[i],
-                          size=checkseg_widget.tile_size_px)
-
-        # Move Napari viewer to current tile
-        reset_view(viewer=viewer, center=centers[checkseg_widget.ind], size=tile_size_px)
-        # change the button/mode for next run
-        checkseg_widget._call_button.text = 'Next'
+            # Center view on whole image
+            reset_view(viewer=viewer,
+                       center=tuple(value/2 for value in viewer.layers['EM image'].data.shape[-2:]),
+                       size=np.max(viewer.layers['EM image'].data.shape[-2:]),
+                       scale=viewer.layers['EM image'].scale)
+            # Make grid and progress map invisible
+            viewer.layers['Grid'].visible = False
+            viewer.layers['Progress map'].visible = False
+            # Change the button/mode for next run
+            checkseg_widget._call_button.text = 'Save Mask and Finish'
 
     elif mode == 'Next':
         # Mark last tile as done in progress map
@@ -143,13 +181,17 @@ def checkseg_widget(viewer: 'napari.viewer.Viewer',
                   center=checkseg_widget.centers[checkseg_widget.ind],
                   size=checkseg_widget.tile_size_px)
         # Save feature shapes
-        fn_shapes = filename.with_name(filename.stem + '_segshapes_check.npz')
-        save_shapes(fn_save=fn_shapes,
+        fn = Path(viewer.layers['EM image'].source.path)
+        save_shapes(em_fn=fn,
                     domes_layer=viewer.layers['Domes'],
                     flats_layer=viewer.layers['Flats'],
-                    spheres_layer=viewer.layers['Spheres'],
-                    current_ind=checkseg_widget.ind)
-        # Check if we are at the end of the list
+                    spheres_layer=viewer.layers['Spheres'])
+        # Save progress
+        save_progress(fn_protocol=fn.with_name(fn.stem + '_segprotocol.txt'),
+                      current_ind=checkseg_widget.ind+1,
+                      tile_size=tile_size)
+
+        # If we are not done yet, move to next tile
         if checkseg_widget.ind < len(checkseg_widget.centers)-1:
             # Check for existance of cellmask
             try:
@@ -168,15 +210,17 @@ def checkseg_widget(viewer: 'napari.viewer.Viewer',
                 # Without cellmask, just increment the value of ind
                 checkseg_widget.ind += 1
             reset_view(viewer=viewer, center=checkseg_widget.centers[checkseg_widget.ind],
-                       size=checkseg_widget.tile_size_px)
+                       size=checkseg_widget.tile_size_px, scale=viewer.layers['EM image'].scale)
+        # After last tile, prepare for finishing
         else:
             # Make grid and progress map invisible
             viewer.layers['Grid'].visible = False
             viewer.layers['Progress map'].visible = False
             # Center view on whole image
-            image_center = tuple(value/2 for value in viewer.layers['EM image'].data.shape[-2:])
-            image_size = viewer.layers['EM image'].data.shape[-2:]
-            reset_view(viewer=viewer, center=image_center, size=np.max(image_size))
+            reset_view(viewer=viewer,
+                       center=tuple(value/2 for value in viewer.layers['EM image'].data.shape[-2:]),
+                       size=np.max(viewer.layers['EM image'].data.shape[-2:]),
+                       scale=viewer.layers['EM image'].scale)
             # change the button/mode for next run
             checkseg_widget._call_button.text = 'Save Mask and Finish'
 
@@ -184,7 +228,7 @@ def checkseg_widget(viewer: 'napari.viewer.Viewer',
         # Translate minimal feature size to pixels
         min_area_px = int(MIN_AREA / (checkseg_widget.px_size ** 2))
 
-        # Check for existance of cellmask
+        # Check for existance of cellmask and remove edge features, if selected
         try:
             cellmask = viewer.layers['Cellmask'].data
         except KeyError:
@@ -192,18 +236,17 @@ def checkseg_widget(viewer: 'napari.viewer.Viewer',
         if remove_edge_feat and cellmask is not None:
             print('Checking for cellmask and removing edge features ...')
             # Remove edge features that overlap with cellmask
-            remove_edge_feat(cellmask=cellmask, feature_layer=viewer.layers['Domes'])
-            remove_edge_feat(cellmask=cellmask, feature_layer=viewer.layers['Flats'])
-            remove_edge_feat(cellmask=cellmask, feature_layer=viewer.layers['Spheres'])
+            remove_edge_features(cellmask=cellmask, feature_layer=viewer.layers['Domes'])
+            remove_edge_features(cellmask=cellmask, feature_layer=viewer.layers['Flats'])
+            remove_edge_features(cellmask=cellmask, feature_layer=viewer.layers['Spheres'])
 
         # Save feature shapes
         print('Saving segmentation shapes ...')
-        fn_shapes = filename.with_name(filename.stem + '_segshapes_check.npz')
-        save_shapes(fn_save=fn_shapes,
+        fn = Path(viewer.layers['EM image'].source.path)
+        save_shapes(em_fn=fn,
                     domes_layer=viewer.layers['Domes'],
                     flats_layer=viewer.layers['Flats'],
-                    spheres_layer=viewer.layers['Spheres'],
-                    current_ind=checkseg_widget.ind)
+                    spheres_layer=viewer.layers['Spheres'])
 
         print('Creating segmentation mask from shapes ...')
         # Get mask shape before removing layers
@@ -227,7 +270,7 @@ def checkseg_widget(viewer: 'napari.viewer.Viewer',
             mask = apply_cellmask(segmask=mask, cellmask=cellmask)
 
         # Save mask
-        fn_mask = filename.with_name(filename.stem + '_segmask_check.tif')
+        fn_mask = fn.with_name(fn.stem + '_segmask_check.tif')
         print(f'Saving new segmentation mask as {fn_mask} ...')
         save_mask(save_fn=fn_mask, mask=mask, exclude_alpha=True)
 
@@ -237,10 +280,15 @@ def checkseg_widget(viewer: 'napari.viewer.Viewer',
         viewer.layers.select_all()
         viewer.layers.remove_selected()
         # Set created attributes back to None
-        checkseg_widget.ind = None
+        checkseg_widget.ind = 0
         checkseg_widget.tile_size_px = None
         checkseg_widget.centers = None
         checkseg_widget.px_size = None
+        # Unlock all widgets
+        checkseg_widget['tile_size'].enabled = True
+        checkseg_widget['filename'].enabled = True
+        checkseg_widget['remove_edge_feat'].enabled = True
+        checkseg_widget['redo'].enabled = True
 
         # Reset button/mode to 'Start'
         checkseg_widget._call_button.text = 'Start'
@@ -334,7 +382,7 @@ def mark_tile(layer: 'napari.Layer', center: Tuple[Union[float, int], Union[floa
 
 
 def reset_view(viewer: 'napari.Viewer', center: Tuple[Union[float, int], Union[float, int]],
-               size: Union[float, int]) -> None:
+               size: Union[float, int], scale: Tuple[Union[float, int], Union[float, int]] = None) -> None:
     """
     Reset the view of a Napari viewer to a specified center and size.
 
@@ -348,22 +396,29 @@ def reset_view(viewer: 'napari.Viewer', center: Tuple[Union[float, int], Union[f
         size (Union[float, int]):
             The new size of the view. The zoom level will be adjusted to include an area of 1.2 * size.
 
+        scale (Tuple[Union[float, int], Union[float, int]]):
+            The scale of the viewer layers. Defaults to None.
+
     Returns:
         None
 
     This function was copied and adapted from the Napari plugin "affinder" by Juan Nunez-Iglesias.
-    Copied at Aug 7, 2023.
+    Copied on Aug 7, 2023.
     URL of the original GitHub project is https://github.com/jni/affinder.
     """
+    if scale is None:
+        scale = (1, 1)
     if viewer.dims.ndisplay != 2:
-        return
+        return  # Todo: Make this work for n-dimensional images? (e.g. 3D)
+        #          For insights, see https://github.com/jni/affinder
     # Center viewer on new position
-    viewer.camera.center = center
+    viewer.camera.center = center * scale
     # Set zoom to include area of 1.2 * size
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         canvas_size = viewer._canvas_size
-    viewer.camera.zoom = np.min(canvas_size) / np.max(1.2 * size)
+        zoom_scaling = np.mean(scale)  # Todo: Check if there is a better way to implement scaling
+    viewer.camera.zoom = np.min(canvas_size) / np.max(1.2 * size * zoom_scaling)
 
 
 def create_mask_from_shapes(mask_shape: Tuple[int, int], domes_layer: 'napari.Layer',
@@ -453,49 +508,52 @@ def save_mask(save_fn: Union[Path, str], mask: np.ndarray,
     tifffile.imwrite(save_fn, mask, imagej=True, compression='zlib')
 
 
-def save_shapes(fn_save: Union[Path, str],  domes_layer: 'napari.Layer',
-                flats_layer: 'napari.Layer', spheres_layer: 'napari.Layer',
-                current_ind: int = 0) -> None:
+def save_shapes(em_fn: Union[str, Path],  domes_layer: 'napari.Layer',
+                flats_layer: 'napari.Layer', spheres_layer: 'napari.Layer') -> None:
     """
-    Save shapes from shape layers as a NumPy file.
+    Use Napari builtins to save shapes layers in csv files.
 
     Parameters:
-        fn_save (Union[Path, str]): The filename or path for saving the shapes data.
+        em_fn (Union[str, Path]): Source path of the EM image.
         domes_layer ('napari.Layer'): The layer containing dome shapes.
         flats_layer ('napari.Layer'): The layer containing flat shapes.
         spheres_layer ('napari.Layer'): The layer containing sphere shapes.
-        current_ind (int, optional): The index of the current tile. Defaults to 0.
 
     Returns:
         None: The function does not return any value.
-
-    Notes:
-        - Translates shape layer data to stacked NumPy arrays.
-        - Creates a dictionary containing shapes from different classes.
-        - The output filename is derived from the input filename:
-          - If the input filename ends with 'segshapes_check.tif', the new filename will be the same.
-          - If the input filename ends with 'segshapes.tif', '_check' will be appended before the extension.
-          - Otherwise, '_segshapes_check' will replace '.tif' in the input filename before adding the new extension.
-        - The shapes are saved using NumPy's np.savez() function.
     """
-    # Make sure filename is a Path object
-    fn_save = Path(fn_save)
-    # Save Napari shapes as stacked numpy arrays. Also keep track of shape types.
-    all_shapes = [None for _ in range(3)]
-    all_shape_types = [None for _ in range(3)]
-    for i, feat_layer in enumerate([domes_layer, flats_layer, spheres_layer]):
-        all_shapes[i] = list_to_array(feat_layer.data)
-        all_shape_types[i] = feat_layer.shape_type
-    # Create a dictionary out of the shapes list and shape types list
-    data = {'dome': all_shapes[0], 'dome_type': all_shape_types[0],
-            'flat': all_shapes[1], 'flat_type': all_shape_types[1],
-            'sphere': all_shapes[2], 'sphere_type': all_shape_types[2],
-            'current_ind': current_ind}
-    # Save shapes using numpy
-    np.savez(fn_save.as_posix(), **data)
+    # Make sure em_fn is a Path object
+    em_fn = Path(em_fn)
+    # Save Napari shapes layers
+    for layer in [domes_layer, flats_layer, spheres_layer]:
+        layer.save(em_fn.with_name(em_fn.stem + f'_shapes_{layer.name.lower()}.csv').as_posix())
 
 
-def display_feature_shapes(viewer: 'napari.Viewer', shapes: dict = None) -> None:
+def save_progress(fn_protocol: Union[Path, str], current_ind: int, tile_size: int) -> None:
+    """
+    Save the current index and tile size to segprotocol file.
+
+    Parameters:
+        fn_protocol(Union[Path, str]): The filename or path to save the progress to.
+        current_ind (int): The index of the current tile.
+        tile_size (int): The size of the tiles in µm units.
+
+    Returns:
+        None: The function does not return any value.
+    """
+    # Prepare config parser
+    config = configparser.ConfigParser()
+    if fn_protocol.exists():
+        config.read(fn_protocol)
+    if not config.has_section('CHECKSEG'):
+        config.add_section('CHECKSEG')
+    config.set('CHECKSEG', 'current_ind', str(current_ind))
+    config.set('CHECKSEG', 'tile_size', str(tile_size))
+    with open(fn_protocol, 'w') as configfile:
+        config.write(configfile)
+
+
+def display_feature_shapes(viewer: 'napari.Viewer', file: Union[Path, str] = None) -> None:
     """
     Add shapes to a Napari viewer.
 
@@ -513,76 +571,45 @@ def display_feature_shapes(viewer: 'napari.Viewer', shapes: dict = None) -> None
     Returns:
         None
     """
-    if shapes is None:
-        shapes = {'dome': np.asarray([]), 'flat': np.asarray([]), 'sphere': np.asarray([])}
+    # Prepare shape files
+    shape_types = ['domes', 'flats', 'spheres']
+    if file is not None:
+        shape_files = [file.with_name(file.stem + f'_shapes_{shape_type}.csv') for shape_type in shape_types]
+    else:
+        shape_files = None
+    # Prepare display parameters
+    par_mapping = {
+        'domes': ('darkred', 'red', 3, 0.4),
+        'flats': ('darkgreen', 'green', 3, 0.4),
+        'spheres': ('darkblue', 'blue', 3, 0.4),
+    }
 
-    # Loop over dictionary
-    for key, value in shapes.items():
-        # Skip shape types
-        if key.endswith('_type') or key.endswith('_ind'):
-            continue
-        # Transform to list
-        value = array_to_list(value)
-        # Prepare color
-        par_mapping = {
-            'dome': ('darkred', 'red', 3, 0.4),
-            'domes': ('darkred', 'red', 3, 0.4),
-            'flat': ('darkgreen', 'green', 3, 0.4),
-            'flats': ('darkgreen', 'green', 3, 0.4),
-            'sphere': ('darkblue', 'blue', 3, 0.4),
-            'spheres': ('darkblue', 'blue', 3, 0.4),
-            'vesicle': ('darkblue', 'blue', 3, 0.4),
-            'vesicles': ('darkblue', 'blue', 3, 0.4),
-            'cell outline': ('white', 'transparent', 30, 1),
-        }
-        edge_c, face_c, edge_w, opacity = par_mapping.get(key.lower(), ('darkgrey', 'grey', 3))
-        # Prepare name
-        if key.lower() in {'dome', 'domes'}:
-            layer_name = 'Domes'
-        elif key.lower() in {'flat', 'flats'}:
-            layer_name = 'Flats'
-        elif key.lower() in {'sphere', 'spheres', 'vesicle', 'vesicles'}:
-            layer_name = 'Spheres'
-        else:
-            layer_name = key[0].upper() + key[1:].lower()
-        # Prepare shape types
-        if key + '_type' in shapes.keys():
-            # Read shape type from dictionary if available
-            shape_type = shapes[key + '_type']
-        else:
-            # Otherwise, try to guess shape type from shape data
-            shape_type = guess_shape_type(features=value)
-
-        # Add to viewer
-        if not value:
-            viewer.add_shapes(shape_type=shape_type,
-                              name=layer_name,
-                              opacity=opacity,
-                              edge_width=edge_w,
-                              edge_color=edge_c,
-                              face_color=face_c)
-        else:
-            viewer.add_shapes(value,
-                              shape_type=shape_type,
-                              name=layer_name,
-                              opacity=opacity,
-                              edge_width=edge_w,
-                              edge_color=edge_c,
-                              face_color=face_c)
-
-
-def guess_shape_type(features: List[np.ndarray]) -> List[str]:
-    """
-    Make educated guess about the shape type of a list of features. Features with 4 vertices are assumed to be ellipses.
-    Features with more than 4 vertices are assumed to be polygons.
-    """
-    shape_type = []
-    for feature in features:
-        if len(feature) == 4:
-            shape_type.append('ellipse')
-        else:
-            shape_type.append('polygon')
-    return shape_type
+    if shape_files is not None:
+        # Loop over shape files
+        for shape_file in shape_files:
+            # Prepare layer name
+            layer_name = shape_file.stem.split('_')[-1].capitalize()
+            # Prepare color and other parameters
+            edge_c, face_c, edge_w, opacity = par_mapping.get(layer_name.lower(), ('darkgrey', 'grey', 3))
+            if shape_file.exists():
+                # Add shapes to viewer
+                viewer.open(path=shape_file, name=layer_name, layer_type='shapes', opacity=opacity,
+                            edge_width=edge_w, edge_color=edge_c, face_color=face_c,
+                            scale=viewer.layers['EM image'].scale)
+            else:
+                # Add empty shapes layer instead
+                viewer.add_shapes(shape_type='polygon', name=layer_name, opacity=opacity,
+                                  edge_width=edge_w, edge_color=edge_c, face_color=face_c,
+                                  scale=viewer.layers['EM image'].scale)
+    else:
+        # Add empty shapes to viewer
+        for shape_type in shape_types:
+            # Prepare color and other parameters
+            edge_c, face_c, edge_w, opacity = par_mapping.get(shape_type, ('darkgrey', 'grey', 3))
+            # Add empty shapes to viewer
+            viewer.add_shapes(shape_type='polygon', name=shape_type.capitalize(), opacity=opacity,
+                              edge_width=edge_w, edge_color=edge_c, face_color=face_c,
+                              scale=viewer.layers['EM image'].scale)
 
 
 def remove_edge_features(cellmask: np.ndarray, feature_layer: 'napari.Layer'):
@@ -664,21 +691,12 @@ def prep_for_gui(files: Union[List[Union[str, Path]], str, Path], parent_folder:
         indices = np.where(np.all(mask == (255, 255, 255), axis=2))
         mask[indices[0], indices[1], :] = 0
 
-        # Translate mask to shapes and convert to stacked numpy arrays. Also keep track of shape types.
-        all_shapes = [None for _ in range(3)]
-        all_shape_types = [None for _ in range(3)]
-        for i in range(3):
-            tmp_shapes, tmp_shape_types = mask_to_shapes(mask[:, :, i], rho=line_density)
-            all_shapes[i] = list_to_array(tmp_shapes)
-            all_shape_types[i] = tmp_shape_types
-        # Create a dictionary out of the shapes list and shape types list
-        data = {'dome': all_shapes[0], 'dome_type': all_shape_types[0],
-                'flat': all_shapes[1], 'flat_type': all_shape_types[1],
-                'sphere': all_shapes[2], 'sphere_type': all_shape_types[2]}
-
-        # Save shapes as a numpy file
-        save_name = file.with_name(file.stem + '_segshapes.npz')
-        np.savez(save_name.as_posix(), **data)
+        # Translate mask to shapes and save in Napari-readable format
+        shape_classes = ['domes', 'flats', 'spheres']
+        for i in range(mask.shape[2]):
+            shape_data = mask_to_shapes(mask[:, :, i], rho=line_density)
+            # Save shapes as csv file
+            shape_data.to_csv(file.with_name(file.stem + f'_shapes_{shape_classes[i]}.csv'), index=False)
 
 
 def prepare_grid(im_shape: Tuple[int, int], tile_size: float, px_size: float) -> Tuple[np.ndarray, np.ndarray, int]:
