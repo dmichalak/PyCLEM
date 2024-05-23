@@ -171,6 +171,33 @@ def extract_files(pattern: str, parent: Union[str, Path] = Path()) -> None:
         new_name = Path(parent, base_fn)
         os.rename(old_name, new_name)
 
+        
+def remove_duplicate_files_from_list(files: List[Union[str, Path]]) -> List[Path]:
+    """
+    Removes duplicates from a list of files. Only the base filename is considered for this meaning if there are files
+    with the same name in different subfolders, all but one will be removed from the list.
+    :param files: list of filenames (str or Path objects)
+    :return: list of filenames (str or Path objects)
+    """
+    unique_files = set()
+    duplicate_files = []
+    for file in files:
+        # Make sure file is a Path() object
+        file = Path(file)
+        # Get the filename without the path
+        file_name = file.name
+        # Check if the filename is already in the set of unique files
+        if file_name in unique_files:
+            duplicate_files.append(file)
+        else:
+            unique_files.add(file_name)
+    # Remove the duplicate files from the original list
+    for duplicate_file in duplicate_files:
+        files.remove(duplicate_file)
+
+    return files
+
 
 if __name__ == '__main__':
     pass
+
