@@ -20,7 +20,7 @@ from skimage.morphology import disk, binary_closing, remove_small_objects
 from skimage.segmentation import find_boundaries
 from skimage.transform import rescale, resize
 
-from pyclem.io import get_files
+from pyclem.file_io import get_files
 
 
 def auto_contrast_3d(input_im: np.ndarray, low: float, high: float) -> np.ndarray:
@@ -498,6 +498,7 @@ def divide(a: Union[int, float], b: Union[int, float]):
         return a / b
 
 
+# Todo: Delete unused function
 def list_to_array(input_list: List[np.ndarray]) -> np.ndarray:
     """
     Convert a list of 2D NumPy arrays into a 3-dimensional NumPy array. Used for saving feature shapes as numpy arrays.
@@ -527,6 +528,7 @@ def list_to_array(input_list: List[np.ndarray]) -> np.ndarray:
         return stacked_arrays
 
 
+# Todo: Delete unused function
 def array_to_list(stacked_array: np.ndarray) -> List[np.ndarray]:
     """
     Convert a 3-dimensional NumPy array back to a list of 2D NumPy arrays.
@@ -556,6 +558,7 @@ def array_to_list(stacked_array: np.ndarray) -> List[np.ndarray]:
     return restored_list
 
 
+# Todo: Refactor and move to file_io.py
 def remove_duplicate_files_from_list(files: List[Union[str, Path]]) -> List[Path]:
     """
     Removes duplicates from a list of files. Only the base filename is considered for this meaning if there are files
@@ -1198,6 +1201,7 @@ def clear_border(im: np.ndarray):
     return im
 
 
+# Todo: Delete unused function
 def convert_to_bool(array: np.ndarray):
     """
     Convert the input array to a boolean copy.
@@ -1211,6 +1215,7 @@ def convert_to_bool(array: np.ndarray):
     return array if array.dtype == bool else array != 0
 
 
+# Todo: Delete unused function
 def convert_back(bool_array: np.ndarray, original_array: np.ndarray):
     """
     Convert a boolean array back to the original data type.

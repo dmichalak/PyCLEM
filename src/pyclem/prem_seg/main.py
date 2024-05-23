@@ -5,7 +5,7 @@ from argparse import Namespace
 from pathlib import Path
 from tkinter import Tk
 
-from pyclem.io import get_files
+from pyclem.file_io import get_files
 from pyclem.prem_seg.PR_segmentation import run_segmentation
 from pyclem.utils import mrcnn_preprocess, mrcnn_postprocess
 
