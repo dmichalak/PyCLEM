@@ -498,66 +498,6 @@ def divide(a: Union[int, float], b: Union[int, float]):
         return a / b
 
 
-# Todo: Delete unused function
-def list_to_array(input_list: List[np.ndarray]) -> np.ndarray:
-    """
-    Convert a list of 2D NumPy arrays into a 3-dimensional NumPy array. Used for saving feature shapes as numpy arrays.
-
-    Parameters:
-        input_list (List[np.ndarray]): A list containing 2D NumPy arrays with shape (N, 2).
-
-    Returns:
-        np.ndarray: A 3-dimensional NumPy array of shape (max_length, 2, X) where X is the number of arrays
-                   in the input_list. The arrays in the input_list are padded with NaN values to have the same
-                   length (max_length) along the first axis. Any "empty" slots in the arrays are filled with NaN values.
-    """
-    if not input_list:
-        # Return empty array if input_list is empty
-        return np.empty((0, 2, 0))
-    else:
-        # Get the largest array among all arrays in the list
-        max_length = max(arr.shape[0] for arr in input_list)
-        # Pad the arrays with NaN values to make them have the same length
-        padded_list = []
-        for arr in input_list:
-            pad_length = max_length - arr.shape[0]
-            padded_arr = np.pad(arr, ((0, pad_length), (0, 0)), mode='constant', constant_values=np.nan)
-            padded_list.append(padded_arr)
-        # Stack the padded arrays along a new axis to create a 3-dimensional array
-        stacked_arrays = np.stack(padded_list, axis=2)
-        return stacked_arrays
-
-
-# Todo: Delete unused function
-def array_to_list(stacked_array: np.ndarray) -> List[np.ndarray]:
-    """
-    Convert a 3-dimensional NumPy array back to a list of 2D NumPy arrays.
-
-    This function is used after loading numpy arrays to restore the original list
-    of 2D arrays and remove any padding with NaN values, making the data suitable for
-    display in Napari.
-
-    Parameters:
-        stacked_array (np.ndarray):
-            A 3-dimensional NumPy array of shape (max_length, 2, X), where X is the number
-            of arrays in the original input_list. The arrays should have been padded with NaN values.
-
-    Returns:
-        List[np.ndarray]:
-            A list containing 2D NumPy arrays with shape (N, 2), where N varies for each array.
-            The function removes the padding with NaN values and restores the original arrays.
-            If the input array is empty, an empty list is returned.
-    """
-
-    restored_list = []
-    if stacked_array.any():
-        # Remove the padding with NaN values and restore the original list arrays
-        for x in range(stacked_array.shape[2]):
-            array_without_nan = stacked_array[:, :, x][~np.isnan(stacked_array[:, :, x]).any(axis=1)]
-            restored_list.append(array_without_nan)
-    return restored_list
-
-
 # Todo: Refactor and move to file_io.py
 def remove_duplicate_files_from_list(files: List[Union[str, Path]]) -> List[Path]:
     """
@@ -1199,35 +1139,6 @@ def clear_border(im: np.ndarray):
     else:
         im = im * im2[1:-1, 1:-1].astype(im.dtype)
     return im
-
-
-# Todo: Delete unused function
-def convert_to_bool(array: np.ndarray):
-    """
-    Convert the input array to a boolean copy.
-
-    Parameters:
-        array (numpy.ndarray): The input array to be converted.
-
-    Returns:
-        numpy.ndarray: A boolean copy of the input array.
-    """
-    return array if array.dtype == bool else array != 0
-
-
-# Todo: Delete unused function
-def convert_back(bool_array: np.ndarray, original_array: np.ndarray):
-    """
-    Convert a boolean array back to the original data type.
-
-    Parameters:
-        bool_array (numpy.ndarray): The boolean array to be converted back.
-        original_array (numpy.ndarray): The original array whose data type should be preserved.
-
-    Returns:
-        numpy.ndarray: A copy of the boolean array with the data type of the original array.
-    """
-    return bool_array if original_array.dtype == bool else bool_array * original_array.max()
 
 
 if __name__ == '__main__':
