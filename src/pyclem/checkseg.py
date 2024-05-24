@@ -123,14 +123,8 @@ def checkseg_widget(
                 remove_edge_features(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Domes'])
                 remove_edge_features(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Flats'])
                 remove_edge_features(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Spheres'])
-            # skip to first tile that is not excluded by cellmask
-            if not progress_loaded:
-                checkseg_widget.ind = skip_empty_tiles(cellmask=np.squeeze(cellmask.data),
-                                                       layer=viewer.layers['Progress map'],
-                                                       centers=checkseg_widget.centers,
-                                                       size=checkseg_widget.tile_size_px,
-                                                       ind=checkseg_widget.ind,
-                                                       last_ind=len(checkseg_widget.centers) - 1)
+        else:
+            cellmask = None
 
         # Prepare grid and display in viewer
         grid, checkseg_widget.centers, checkseg_widget.tile_size_px = prepare_grid(
@@ -150,6 +144,15 @@ def checkseg_widget(
 
         # Load shapes and display in viewer
         display_feature_shapes(viewer=viewer, file=filename)
+
+        # skip to first tile that is not excluded by cellmask
+        if not progress_loaded and cellmask is not None:
+            checkseg_widget.ind = skip_empty_tiles(cellmask=np.squeeze(cellmask.data),
+                                                   layer=viewer.layers['Progress map'],
+                                                   centers=checkseg_widget.centers,
+                                                   size=checkseg_widget.tile_size_px,
+                                                   ind=checkseg_widget.ind,
+                                                   last_ind=len(checkseg_widget.centers) - 1)
 
         # Mark skipped or previously checked tiles
         for i in range(checkseg_widget.ind):
@@ -527,7 +530,8 @@ def save_shapes(em_fn: Union[str, Path],  domes_layer: 'napari.Layer',
     em_fn = Path(em_fn)
     # Save Napari shapes layers
     for layer in [domes_layer, flats_layer, spheres_layer]:
-        layer.save(em_fn.with_name(em_fn.stem + f'_shapes_{layer.name.lower()}.csv').as_posix())
+        if layer.data:
+            layer.save(em_fn.with_name(em_fn.stem + f'_shapes_{layer.name.lower()}.csv').as_posix())
 
 
 def save_progress(fn_protocol: Union[Path, str], current_ind: int, tile_size: int) -> None:
