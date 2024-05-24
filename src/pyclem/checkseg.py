@@ -112,6 +112,26 @@ def checkseg_widget(
             print(f'File not found: {filename}')
             return
 
+        # Check for cellmask file and display in Viewer, if possible
+        cellmask_fn = filename.with_name(filename.stem + '_cellmask.tif')
+        if cellmask_fn.exists():
+            cellmask = AICSImage(cellmask_fn)
+            viewer.add_image(np.squeeze(cellmask.data), name='Cellmask', colormap='gray_r', blending='minimum',
+                             scale=viewer.layers['EM image'].scale)
+            # Remove features that touch the edge of the cellmask
+            if remove_edge_feat:
+                remove_edge_features(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Domes'])
+                remove_edge_features(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Flats'])
+                remove_edge_features(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Spheres'])
+            # skip to first tile that is not excluded by cellmask
+            if not progress_loaded:
+                checkseg_widget.ind = skip_empty_tiles(cellmask=np.squeeze(cellmask.data),
+                                                       layer=viewer.layers['Progress map'],
+                                                       centers=checkseg_widget.centers,
+                                                       size=checkseg_widget.tile_size_px,
+                                                       ind=checkseg_widget.ind,
+                                                       last_ind=len(checkseg_widget.centers) - 1)
+
         # Prepare grid and display in viewer
         grid, checkseg_widget.centers, checkseg_widget.tile_size_px = prepare_grid(
             im_shape=(em_file.dims.Y, em_file.dims.X),
@@ -130,25 +150,6 @@ def checkseg_widget(
 
         # Load shapes and display in viewer
         display_feature_shapes(viewer=viewer, file=filename)
-
-        # Check for cellmask file and display in Viewer, if possible
-        cellmask_fn = filename.with_name(filename.stem + '_cellmask.tif')
-        if cellmask_fn.exists():
-            cellmask = AICSImage(cellmask_fn)
-            viewer.add_image(np.squeeze(cellmask.data), name='Cellmask', colormap='gray_r', blending='minimum')
-            # Remove features that touch the edge of the cellmask
-            if remove_edge_feat:
-                remove_edge_features(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Domes'])
-                remove_edge_features(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Flats'])
-                remove_edge_features(cellmask=np.squeeze(cellmask.data), feature_layer=viewer.layers['Spheres'])
-            # skip to first tile that is not excluded by cellmask
-            if not progress_loaded:
-                checkseg_widget.ind = skip_empty_tiles(cellmask=np.squeeze(cellmask.data),
-                                                       layer=viewer.layers['Progress map'],
-                                                       centers=checkseg_widget.centers,
-                                                       size=checkseg_widget.tile_size_px,
-                                                       ind=checkseg_widget.ind,
-                                                       last_ind=len(checkseg_widget.centers) - 1)
 
         # Mark skipped or previously checked tiles
         for i in range(checkseg_widget.ind):
@@ -553,7 +554,9 @@ def save_progress(fn_protocol: Union[Path, str], current_ind: int, tile_size: in
         config.write(configfile)
 
 
-def display_feature_shapes(viewer: 'napari.Viewer', file: Union[Path, str] = None) -> None:
+def display_feature_shapes(viewer: 'napari.Viewer',
+                           file: Union[Path, str] = None,
+                           shape_types: List[str] = ['flats', 'domes', 'spheres']) -> None:
     """
     Add shapes to a Napari viewer.
 
@@ -564,19 +567,26 @@ def display_feature_shapes(viewer: 'napari.Viewer', file: Union[Path, str] = Non
         viewer (napari.Viewer):
             The Napari viewer instance to which the shapes will be added.
 
-        shapes (dict):
-            A dictionary containing shapes as 3D numpy arrays. The keys of the dictionary are the names of the shapes.
-            The 3D arrays need to be converted to lists of 2D arrays before adding them.
+        file (Union[Path, str]):
+            File path to the EM image. Default is None.
+
+        shape_types (List[str]):
+            List of shape types to display. Default is ['flats', 'domes', 'spheres'].
 
     Returns:
         None
     """
     # Prepare shape files
-    shape_types = ['domes', 'flats', 'spheres']
+    shape_files = []
     if file is not None:
-        shape_files = [file.with_name(file.stem + f'_shapes_{shape_type}.csv') for shape_type in shape_types]
+        for shape_type in shape_types:
+            if file.with_name(file.stem + f'_shapes_{shape_type}.csv').exists():
+                shape_files.append(file.with_name(file.stem + f'_shapes_{shape_type}.csv'))
+            else:
+                shape_files.append(None)
     else:
-        shape_files = None
+        shape_files = [None] * len(shape_types)
+
     # Prepare display parameters
     par_mapping = {
         'domes': ('darkred', 'red', 3, 0.4),
@@ -584,26 +594,28 @@ def display_feature_shapes(viewer: 'napari.Viewer', file: Union[Path, str] = Non
         'spheres': ('darkblue', 'blue', 3, 0.4),
     }
 
-    if shape_files is not None:
-        # Loop over shape files
-        for shape_file in shape_files:
+    # Loop over shape files
+    for shape_type, shape_file in zip(shape_types, shape_files):
+        if shape_file is not None:
             # Prepare layer name
-            layer_name = shape_file.stem.split('_')[-1].capitalize()
+            layer_name = shape_type.capitalize()
             # Prepare color and other parameters
             edge_c, face_c, edge_w, opacity = par_mapping.get(layer_name.lower(), ('darkgrey', 'grey', 3))
-            if shape_file.exists():
-                # Add shapes to viewer
+            # Add shapes to viewer
+            try:
                 viewer.open(path=shape_file, name=layer_name, layer_type='shapes', opacity=opacity,
                             edge_width=edge_w, edge_color=edge_c, face_color=face_c,
                             scale=viewer.layers['EM image'].scale)
-            else:
-                # Add empty shapes layer instead
-                viewer.add_shapes(shape_type='polygon', name=layer_name, opacity=opacity,
+            except IndexError:
+                # Add empty layer instead
+                print(f'Could not load shapes from {shape_file}.\n'
+                      f'This file likely contains no shapes to display.\n'
+                      f'Adding empty shapes layer instead.')
+                # Add empty shapes to viewer
+                viewer.add_shapes(shape_type='polygon', name=shape_type.capitalize(), opacity=opacity,
                                   edge_width=edge_w, edge_color=edge_c, face_color=face_c,
                                   scale=viewer.layers['EM image'].scale)
-    else:
-        # Add empty shapes to viewer
-        for shape_type in shape_types:
+        else:
             # Prepare color and other parameters
             edge_c, face_c, edge_w, opacity = par_mapping.get(shape_type, ('darkgrey', 'grey', 3))
             # Add empty shapes to viewer
