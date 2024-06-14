@@ -13,16 +13,16 @@ from pyclem.utils import mrcnn_preprocess, mrcnn_postprocess
 # Parameters for PR_segmentation.py:
 #################################################
 # Initial directory for file dialog (your general data directory e.g. L-drive)
-startdir = r'PATH/to/your/data/folder'  # e.g. r'L:/AA_AMA/data'
+startdir = r'L:/'  # e.g. r'L:/AA_AMA/data'
 # Root directory of your local pyclem repository
-root_dir = os.path.abspath("PATH/to/your/pyclem/repository")  # e.g. "E:/pyclem"
+root_dir = r'E:/pyclem'  # "PATH/to/your/pyclem/repository"
+# Path to trained weights file
+model_path = r'L:\AA_Group_Projects\AA_Deeplearning\Models\Clathrin\mrcnn_pr_clathrin_v1.h5'
 # Regular expression pattern to pick file used for evaluation or training
 EM_file_pattern = r'^.*cell\d{3}.*_inv\.tif$'  # e.g. r'^.*cell\d{3}.*_inv\.tif$' corresponds to '***cell012***_inv.tif'
 
 # Decide if you want to delete individual image tiles after processing
 delete_tiles = True
-# Path to trained weights file
-model_path = r'./Models/mask_rcnn_pr_0600.h5'
 # Tell Mask R-CNN what to do
 command = 'evaluate'  # 'train' or 'evaluate'
 # Regular expression pattern to load tiled images
@@ -71,6 +71,14 @@ max_size_remove = 1000  # This corresponds to ~ 77x77 nm at a mrcnn_px_size of 2
 # Main body of AI-based PR-Segmentation:
 #############################################################################################################
 def main():
+    # Check if the paths exist
+    if not Path(startdir).exists():
+        exit('"startdir" does not exist!')
+    if not Path(root_dir).exists():
+        exit('"root_dir" does not exist!')
+    if not Path(model_path).exists():
+        exit('"model_path" does not exist!')
+
     # Select directory containing EM-files to segment (will walk through sub-folders and search for EM_file_pattern)
     root = Tk()
     root.withdraw()
