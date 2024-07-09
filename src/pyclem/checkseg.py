@@ -560,7 +560,7 @@ def save_progress(fn_protocol: Union[Path, str], current_ind: int, tile_size: in
 
 def display_feature_shapes(viewer: 'napari.Viewer',
                            file: Union[Path, str] = None,
-                           shape_types: List[str] = ['flats', 'domes', 'spheres']) -> None:
+                           shape_types: List[str] = None) -> None:
     """
     Add shapes to a Napari viewer.
 
@@ -580,6 +580,10 @@ def display_feature_shapes(viewer: 'napari.Viewer',
     Returns:
         None
     """
+    # Set default shape types
+    if shape_types is None:
+        shape_types = ['flats', 'domes', 'spheres']
+
     # Prepare shape files
     shape_files = []
     if file is not None:
@@ -687,9 +691,11 @@ def prep_for_gui(files: Union[List[Union[str, Path]], str, Path], parent_folder:
         elif file.with_name(file.stem + '_segmask.tif').exists():
             mask_file = file.with_name(file.stem + '_segmask.tif')
         else:
-            raise FileNotFoundError(f'Could not find a mask for {file}')
-        mask = np.squeeze(AICSImage(mask_file).data)
+            warnings.warn(f'Could not find a mask for {file.name}. '
+                          f'Preparing empty shapes layers to draw mask from scratch.')
+            continue
 
+        mask = np.squeeze(AICSImage(mask_file).data)
         # If necessary, check for existence of cellmask and apply it to the segmask
         if not np.any(np.all(mask == [255, 255, 255], axis=2)):
             cellmask_file = file.with_name(file.stem + '_cellmask.tif')
@@ -706,13 +712,12 @@ def prep_for_gui(files: Union[List[Union[str, Path]], str, Path], parent_folder:
         # (this is to avoid issues with the mask_to_shapes function)
         indices = np.where(np.all(mask == (255, 255, 255), axis=2))
         mask[indices[0], indices[1], :] = 0
-
         # Translate mask to shapes and save in Napari-readable format
-        shape_classes = ['domes', 'flats', 'spheres']
+        shape_types = ['domes', 'flats', 'spheres']
         for i in range(mask.shape[2]):
             shape_data = mask_to_shapes(mask[:, :, i], rho=line_density)
             # Save shapes as csv file
-            shape_data.to_csv(file.with_name(file.stem + f'_shapes_{shape_classes[i]}.csv'), index=False)
+            shape_data.to_csv(file.with_name(file.stem + f'_shapes_{shape_types[i]}.csv'), index=False)
 
 
 def prepare_grid(im_shape: Tuple[int, int], tile_size: float, px_size: float) -> Tuple[np.ndarray, np.ndarray, int]:
