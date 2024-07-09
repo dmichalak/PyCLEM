@@ -227,38 +227,41 @@ def get_feature_stats(file: Union[str, Path],
             1. Summary statistics for the image.
             2. Detailed statistics for individual features.
     """
-    # Make sure fn is a Path object
+    # Make sure fn is a Path object and exists
     file = Path(file)
-    # Load mask
-    try:
-        mask = np.squeeze(AICSImage(file.with_name(file.stem + mask_suffix)).data)
-    except FileNotFoundError:
-        raise FileNotFoundError(f'Could not find mask file (suffix: {mask_suffix}) for {file.name}.\n'
-                                f'Make sure it is in the same folder as the EM image file!')
-
+    if not file.exists():
+        raise FileNotFoundError(f'Could not find corresponding mask file (mask_suffix: {mask_suffix}) '
+                                f'for {file.name}.\n'
+                                f'Make sure it is in the same folder as the EM image!')
     # Initialize dictionary to store sum statistics and list for individual feature statistics
     stats = {}
     stats_detail = []
+    # Load mask
+    mask = AICSImage(file.with_name(file.stem + mask_suffix))
     # Get pixel size from image metadata
-    stats['px_size'] = AICSImage(file).physical_pixel_sizes.X
+    stats['px_size [um/px]'] = AICSImage(file).physical_pixel_sizes.X
+    # Limit mask to numpy array for easier code below
+    mask = np.squeeze(mask.data)
 
+    # Get total size of image
+    stats['image_size [px^2]'] = mask.size // mask.shape[-1]
     # Get size of analysis area (cell)
     if np.any(np.all(mask == [255, 255, 255], axis=2)):
-        stats['cell_area'] = np.sum(~np.all(mask == [255, 255, 255], axis=2))
+        stats['cell_area [px^2]'] = np.sum(~np.all(mask == [255, 255, 255], axis=2))
         # Remove cellmask for remaining analysis
         mask[np.all(mask == [255, 255, 255], axis=2)] = 0
     elif file.with_name(file.stem + '_cellmask.tif').exists():
         cellmask = np.squeeze(AICSImage(file.with_name(file.stem + '_cellmask.tif')).data)
-        stats['cell_area'] = np.sum(~cellmask)
-    else:  # If no cellmask is available, set cell area to whole image area
-        stats['cell_area'] = mask.size / 3
+        stats['cell_area [px^2]'] = np.sum(~cellmask)
+    else:  # If no cellmask is available, set cell area to whole image
+        stats['cell_area [px^2]'] = stats['image_size [px^2]']
 
     # Loop over feature classes to get individual feature statistics
     for f, feat_class in enumerate(feature_class):
         features = regionprops(label(mask[:, :, f]))
         for feat in features:
             stats_detail.append(
-                pd.DataFrame({'class': feat_class, 'size': feat.area}, index=[0])
+                pd.DataFrame({'class': feat_class, 'size [px^2]': feat.area}, index=[0])
             )
     # Transform list of individual feature statistics to pandas data frame
     stats_detail = pd.concat(stats_detail, ignore_index=True)
@@ -266,15 +269,15 @@ def get_feature_stats(file: Union[str, Path],
     # Get sum statistics
     for f, feat_class in enumerate(feature_class):
         # Get number of features
-        stats[f'{feat_class}_num'] = stats_detail[stats_detail['class'] == feat_class]['size'].count()
+        stats[f'{feat_class}_#'] = stats_detail[stats_detail['class'] == feat_class]['size [px^2]'].count()
         # Get area covered by this feature class
-        stats[f'{feat_class}_area'] = stats_detail[stats_detail['class'] == feat_class]['size'].sum()
+        stats[f'{feat_class}_area [px^2]'] = stats_detail[stats_detail['class'] == feat_class]['size [px^2]'].sum()
         # Get average feature size
-        stats[f'{feat_class}_avg_size'] = stats_detail[stats_detail['class'] == feat_class]['size'].mean()
+        stats[f'{feat_class}_avg_size [px^2]'] = stats_detail[stats_detail['class'] == feat_class]['size [px^2]'].mean()
     # Get total number of features
-    stats['total_num'] = stats_detail['size'].count()
+    stats['total_#'] = stats_detail['size [px^2]'].count()
     # Get total area covered by features
-    stats['total_area'] = stats_detail['size'].sum()
+    stats['total_area [px^2]'] = stats_detail['size [px^2]'].sum()
     # Transform dictionary to pandas data frame
     stats = pd.DataFrame(stats, index=[file.name])
 

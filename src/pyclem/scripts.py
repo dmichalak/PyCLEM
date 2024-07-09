@@ -131,9 +131,9 @@ def batch_apply_cellmask(analysis_dir: Union[str, Path],
 
 def batch_get_stats(analysis_dir: Union[str, Path],
                     pattern: str = r'\d{8}.*cell\d{3}_inv\.tif',
-                    do_mrcnn_stats: bool = True,
                     do_feature_stats: bool = True,
-                    do_brightness_stats: bool = True,
+                    do_mrcnn_stats: bool = False,
+                    do_brightness_stats: bool = False,
                     do_summary: bool = True) -> None:
     """
     Get statistics of accuracy metrics for mrcnn-segmentation for all samples in a given directory.
