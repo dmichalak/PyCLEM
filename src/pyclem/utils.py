@@ -343,8 +343,6 @@ def mask_to_shapes(mask: np.ndarray, rho: float = 1/10) -> pd.DataFrame:
             # Combine contours if necessary
             if len(contours) == 1:
                 contour = contours[0]
-            elif len(contours) == 2:
-                contour = connect_polygons(poly1=contours[0], poly2=contours[1])
             else:
                 # Get number of contours and prepare matrix for pairwise minimum distances and corresponding points
                 num_contours = len(contours)
@@ -378,7 +376,7 @@ def mask_to_shapes(mask: np.ndarray, rho: float = 1/10) -> pd.DataFrame:
             # Add contour to shapes (apply offset to get global coordinates)
             # Note: Up to here, contours were closed polygons (i.e., last point = first point)
             #       --> Remove last point to avoid duplicate points in the final shape
-            if len(contour) > 2:
+            if (contour[0, :] == contour[-1, :]).all():
                 shapes.append(contour[:-1, :] + offset)
 
         # Prepare arrays with information for every shape vertex (e.g., shape type, vertex-index, ...)
