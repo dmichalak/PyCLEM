@@ -542,6 +542,10 @@ def unblind_files(target_dir: Union[str, Path]) -> None:
     for old_name, blind_name in name_dict.items():
         # Get files with blind_name in the name
         files, _ = get_files(pattern=blind_name, subdir=target_dir)
+        # In case this blind_name is not found in any file, continue with next blind_name.
+        # This might be the case if the user deleted files or subfolders.
+        if not files:
+            continue
         files = [Path(target_dir, file) for file in files]
         # Loop over files
         for file in files:
