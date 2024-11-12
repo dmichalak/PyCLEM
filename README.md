@@ -6,7 +6,7 @@
 [![CI](https://github.com/andreasmarnold/pyclem/actions/workflows/ci.yml/badge.svg)](https://github.com/andreasmarnold/pyclem/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/andreasmarnold/pyclem/branch/main/graph/badge.svg)](https://codecov.io/gh/andreasmarnold/pyclem)
 
-This package contains tools for AI-supported segmentation of platinum replica electron microscopy (PREM) images.
+This package contains tools for ai-supported segmentation of platinum replica electron microscopy (PREM) images.
 It further provides napari-widgets for the manual correction of the segmentation results and some useful scripts for
 the (statistical) analysis of the segmentation results.
 
