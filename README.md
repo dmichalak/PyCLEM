@@ -28,6 +28,7 @@ Make sure to install all required tools before proceeding with the installation 
       L:\Lab-Taraska\AA_Group_Projects\AA_Deeplearning\cudnn-windows-x86_64-9.1.1.17_cuda12-archive
     - General users can download the library from the official website:<br/>
       https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/windows-x86_64/
+    - It can be installed using conda with ```conda install cudnn=9.1.1.17 -c anaconda```
     - Copy all files from the downloaded library folder to the CUDA 12.4 driver directory.<br/> 
       **NHLBI users will need IT-support for this!**
 5. On Windows, you must have the Visual C++ 2015 build tools on your path! <br/>
