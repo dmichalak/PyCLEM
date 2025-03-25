@@ -54,7 +54,7 @@ def crop_to_features(mask: np.ndarray, images: List[np.ndarray],
     # Check if mask is uint8 or bool (to later exclude tiles with features too close to the cell edge)
     if mask.dtype == np.uint8:
         cell_mask = (255, 255, 255)
-    elif mask.dtype == np.bool:
+    elif mask.dtype == bool: # replaced np.bool with bool
         cell_mask = [True, True, True]
     else:
         raise NotImplementedError('Only uint8 and bool masks are supported.')

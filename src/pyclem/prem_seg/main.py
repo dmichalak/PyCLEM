@@ -1,6 +1,7 @@
 import os
 import shutil
 import tkinter.filedialog as fd
+import sys
 from argparse import Namespace
 from pathlib import Path
 from tkinter import Tk
@@ -13,13 +14,14 @@ from pyclem.utils import mrcnn_preprocess, mrcnn_postprocess
 # Parameters for PR_segmentation.py:
 #################################################
 # Initial directory for file dialog (your general data directory e.g. L-drive)
-startdir = r'L:/'  # e.g. r'L:/AA_AMA/data'
+startdir = r'/mnt/storage/data/prem/20250226_gb1_D1-D2/mdamb231_pitstop2_D1D2/'  # e.g. r'L:/AA_AMA/data'
 # Root directory of your local pyclem repository
-root_dir = r'E:/pyclem'  # "PATH/to/your/pyclem/repository"
+root_dir = r'/home/michalakdj/src/pyclem'  # "PATH/to/your/pyclem/repository"
 # Path to trained weights file
-model_path = r'L:\AA_Group_Projects\AA_Deeplearning\Models\Clathrin\mrcnn_pr_clathrin_v1.h5'
+model_path = r'/mnt/storage/data/prem/models/mrcnn_pr_clathrin_v1.h5'
 # Regular expression pattern to pick file used for evaluation or training
-EM_file_pattern = r'^.*cell\d{3}.*_inv\.tif$'  # e.g. r'^.*cell\d{3}.*_inv\.tif$' corresponds to '***cell012***_inv.tif'
+EM_file_pattern = r'^.*cell\d{3}.*_inv\.tif$'
+#EM_filt_pattern = r'^.*cell\d{3}.*_inv\.tif$'  # e.g. r'^.*cell\d{3}.*_inv\.tif$' corresponds to '***cell012***_inv.tif'
 
 # Decide if you want to delete individual image tiles after processing
 delete_tiles = True
@@ -28,7 +30,7 @@ command = 'evaluate'  # 'train' or 'evaluate'
 # Regular expression pattern to load tiled images
 FILE_EXT = 'x[0-9][0-9][0-9]y[0-9][0-9][0-9].tif'
 # Directory to save logs and model checkpoints
-default_dataset_year = "2014"
+default_dataset_year = "2025"
 # Default limit for number of images to analyze with Mask R-CNN (???)
 im_limit = 500
 # Number of GPUs to be used
@@ -73,11 +75,11 @@ max_size_remove = 1000  # This corresponds to ~ 77x77 nm at a mrcnn_px_size of 2
 def main():
     # Check if the paths exist
     if not Path(startdir).exists():
-        exit('"startdir" does not exist!')
+        sys.exit('"startdir" does not exist!')
     if not Path(root_dir).exists():
-        exit('"root_dir" does not exist!')
+        sys.exit('"root_dir" does not exist!')
     if not Path(model_path).exists():
-        exit('"model_path" does not exist!')
+        sys.exit('"model_path" does not exist!')
 
     # Select directory containing EM-files to segment (will walk through sub-folders and search for EM_file_pattern)
     root = Tk()
@@ -106,7 +108,7 @@ def main():
         #                         max_size_border_feature=max_size_remove)
         print('This part of the code is not yet adapted to the new folder structure!')
     else:
-        exit('Command not recognized! Use "train" or "evaluate".')
+        sys.exit('Command not recognized! Use "train" or "evaluate".')
 
     # Prepare arguments for Mask R-CNN segmentation
     print('Run Mask R-CNN segmentation!')
@@ -143,7 +145,7 @@ def main():
                          resultFolder=None,
                          year=default_dataset_year)
     else:
-        exit('Command not recognized! Use "train" or "evaluate".')
+        sys.exit('Command not recognized! Use "train" or "evaluate".')
     # Change working directory to drive with CUDA library
     # (to avoid issues with automatically finding the CUDA library)
     os.chdir(root_dir)
